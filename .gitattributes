@@ -1,0 +1,4 @@
+# GitHub language statistics (Linguist)
+# .qmd is classed as "RMarkdown" (prose) and is excluded from the language bar by default;
+# count the Quarto documents as R code instead.
+*.qmd linguist-detectable=true linguist-language=R
