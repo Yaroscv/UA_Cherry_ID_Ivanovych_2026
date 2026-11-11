@@ -1,0 +1,51 @@
+ID,Parent1,Parent2,P1_status,P2_status
+Aelita [AEL/1],Drogans gelbe Knorpel.,,confirmed,
+Amazonka [AMZ/1],Siestronka [SES/2],,confirmed,
+Annushka [ANN/1],Donchanka,Valerii Chkalov (Bakhmut),confirmed,recorded_v2
+Anons [ANO/4],Drogans gelbe Knorpel.,,confirmed,
+Anshlah [ANS/1],Zöschener Oktober Knorpel.,Prestyzhna,recorded,confirmed
+Dachnytsia [DAC/1],Drogans gelbe Knorpel.,,confirmed,
+Donchanka [DNN/1],Drogans gelbe Knorpel.,,confirmed,
+Donetskyi uholok [DOU/1],Drogans gelbe Knorpel.,Valerii Chkalov (Bakhmut),confirmed,recorded_v2
+Kazka [SKA/3],Drogans gelbe Knorpel.,Valerii Chkalov,confirmed,recorded
+Krupnoplidna [KRU/4],Drogans gelbe Knorpel.,,confirmed,
+Lasunia [LAS/1],Zöschener Oktober Knorpel.,Prestyzhna,recorded,confirmed
+Lehenda Mliieva [LEG/1],Krupnoplidna,,confirmed,
+Liubava [LUB/3],Drogans gelbe Knorpel.,,confirmed,
+Melitopolska myrna [MEM/1],Drogans gelbe Knorpel.,Valerii Chkalov,confirmed,recorded
+Mirazh [MIR/1],Drogans gelbe Knorpel.,Valerii Chkalov,confirmed,recorded
+Otrada (D 44-1) [OTR/1-3],Annushka,Anons,confirmed,confirmed
+Pokazkova [POK/1],Rozheva mliivska,Dönissens gelbe Knorpel.,recorded,candidate
+Prestyzhna [PRE/1],Drogans gelbe Knorpel.,Valerii Chkalov,confirmed,recorded
+Prysadybna [PRY/3],Dönissens gelbe Knorpel.,Jaboulay,confirmed,confirmed
+Rannia rozova [RAR/1],Drogans gelbe Knorpel.,Skorospilka,confirmed,recorded
+Ruksandra [RUK/1],Donchanka,Valerii Chkalov (Bakhmut),confirmed,recorded_v2
+Shchedrist [SDR/1],Forma 2120,Dönissens gelbe Knorpel.,recorded,candidate
+Studentka [STD/1],Siestronka [SES/2],Donetska krasavytsia [DON/2],confirmed,confirmed
+Talisman [TAL/4],Drogans gelbe Knorpel.,Valerii Chkalov,confirmed,recorded
+Valeriia [VLR/1],Donchanka,Valerii Chkalov,confirmed,recorded
+Yaroslavna [YAR/2],Drogans gelbe Knorpel.,,confirmed,
+Zodiak [ZOD/1],Drogans gelbe Knorpel.,Tavrychanka,confirmed,recorded
+AVCV1 [AVCV1],Drogans gelbe Knorpel.,Donchanka,confirmed,candidate
+Mykhailivska chorna [AVLV1],Lapins,,candidate,
+Sato Nishiki [34],Napoleon,,confirmed,
+Siestronka [SES/2],Umanska skorospilka,,recorded,
+Umanska skorospilka,Dönissens gelbe Knorpel.,Griotte d'Ostheim,recorded,recorded
+Elektra [ELE/2],,Valerii Chkalov,,recorded
+Lesia [LES/1],Krasnaya plotnaya,,recorded,
+Prostir [PRS/1],Emperor Francis,Valerii Chkalov,recorded,recorded
+Melitopolska chorna [MEL/2],Frantsuzka chorna,,recorded,
+Yedyna [JED/1],Zolota,,recorded,
+Naiada [NAY/1],Rozheva mliivska,,recorded,
+Dar Mliieva [DAR/1],Lyubskaya,,recorded,
+Donetska rannia [DOR/1],Kytaivska chorna,Skorospilka,recorded,recorded
+Aboryhenka [ABO/1],Forma 2120,,recorded,
+Donetska krasavytsia [DON/2],,Valerii Chkalov (Bakhmut),,recorded_v2
+Skorospilka,Emperor Francis,Früheste der Mark,recorded,recorded
+Valeriia [VLR/1],AVCV1,,candidate,
+Heneralska,Zolota,Emperor Francis,recorded,recorded
+"D 54-82 [Bakhmut, not genotyped]",Donchanka,Valerii Chkalov (Bakhmut),recorded,recorded_v2
+Proshchalna Taranenko [PRO/2],"D 54-82 [Bakhmut, not genotyped]",,recorded,
+Dzherelo [DZE/1],,Valerii Chkalov (Bakhmut),,recorded_v2
+Etyka [ETY/2],,Valerii Chkalov (Bakhmut),,recorded_v2
+Lesia [LES/1],,Valerii Chkalov (Bakhmut),,recorded_v2

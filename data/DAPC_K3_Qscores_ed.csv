@@ -1,0 +1,91 @@
+sample_name,pop_name,assigned_cluster,Cluster_1,Cluster_2,Cluster_3
+Valerii Chkalov VAL/3,NA,1,0.979,0.012,0.009
+Melitopolska chorna MEL/2,Modern cultivar,1,0.964,0.031,0.005
+Anons ANO/4,Modern cultivar,1,0.999,0,0.001
+Talisman TAL/4,Modern cultivar,1,0.998,0,0.002
+Krupnoplidna KRU/4,Modern cultivar,1,0.996,0,0.004
+Kazka SKA/3,Modern cultivar,1,0.999,0,0.001
+Melitopolska myrna MEM/1,Modern cultivar,1,1,0,0
+Temporion TEM/1-2,Modern cultivar,1,0.976,0.003,0.021
+Prostir PRS/1,Modern cultivar,1,0.999,0,0
+Prestyzhna PRE/1,Modern cultivar,1,1,0,0
+Anshlah ANS/1,Modern cultivar,1,1,0,0
+Lasunia LAS/1,Modern cultivar,1,1,0,0
+Mirazh MIR/1,Modern cultivar,1,1,0,0
+Zodiak ZOD/1,Modern cultivar,1,0.972,0.018,0.01
+Shans SAN/1,Modern cultivar,1,0.894,0.014,0.092
+Prysadybna PRY/3,Early selection cultivar,3,0.418,0,0.582
+Elektra ELE/2,Modern cultivar,1,0.995,0,0.004
+Dachnytsia DAC/1,Modern cultivar,1,0.993,0,0.007
+Proshchalna Taranenko PRO/2,Modern cultivar,1,1,0,0
+Vasylysa prekrasna VAS/3,Modern cultivar,1,1,0,0
+Donetska krasavytsia DON/1,NA,1,0.999,0.001,0
+Donetska krasavytsia DON/2,NA,3,0.706,0.004,0.29
+Otrada OTR/1-3,Modern cultivar,1,1,0,0
+Annushka ANN/1,Modern cultivar,1,0.998,0.001,0.001
+Etyka ETY/2,Modern cultivar,1,0.989,0,0.011
+Yaroslavna YAR/1,NA,1,0.999,0,0
+Yaroslavna YAR/2,Modern cultivar,1,0.926,0.074,0
+Donchanka DNN/1,Modern cultivar,1,0.999,0,0.001
+Dzherelo DZE/1,Early selection cultivar,3,0.002,0,0.998
+Valeriia VLR/1,Modern cultivar,1,0.999,0,0.001
+Donetskyi uholok DOU/1,Modern cultivar,1,0.998,0.002,0
+Siestronka SES/1,Early selection cultivar,3,0,0,1
+Siestronka SES/2,Early selection cultivar,3,0,0,1
+Zheltochek ZEL/1,Early selection cultivar,1,0.88,0,0.12
+Rannia rozova RAR/1,Early selection cultivar,1,0.995,0.003,0.002
+Amazonka AMZ/1,Modern cultivar,1,0.915,0.002,0.083
+Studentka STD/1,Modern cultivar,3,0.004,0,0.996
+Donetska rannia DOR/1,Early selection cultivar,1,0.895,0.005,0.1
+Aelita AEL/1,Modern cultivar,1,0.987,0.009,0.004
+Ruksandra RUK/1,Modern cultivar,1,0.998,0.001,0.001
+Lesia LES/1,Early selection cultivar,3,0.004,0,0.996
+D 58-52 58-52/1,Modern cultivar,1,1,0,0
+D 4405 44-15/1,Modern cultivar,1,1,0,0
+Nizhnist NIJ/2,Early selection cultivar,2,0.002,0.994,0.004
+Liubava LUB/3,Modern cultivar,1,0.996,0,0.003
+Kytaivska chorna KYT/3,Early selection cultivar,2,0.136,0.862,0.002
+Lehenda Mliieva LEG/1,Modern cultivar,3,0.247,0,0.753
+Dar Mliieva DAR/1,Modern cultivar,1,0.874,0.084,0.042
+Koralova KRL/1,Early selection cultivar,3,0,0,1
+Biriuza BIR/1,Early selection cultivar,3,0,0,1
+Naiada NAY/1,Early selection cultivar,1,1,0,0
+Nektarna NEK/1,Early selection cultivar,2,0.013,0.912,0.075
+Yuvileina mliivska JUB/1,Early selection cultivar,3,0.201,0.008,0.791
+Chervneva CRN/1,Early selection cultivar,1,1,0,0
+Mliivska chorna MLI/1,Early selection cultivar,2,0.004,0.838,0.157
+Veselka VES/1,Early selection cultivar,3,0.002,0,0.998
+Aboryhenka ABO/1,Early selection cultivar,3,0.06,0.01,0.93
+Pokazkova POK/1,Early selection cultivar,3,0,0.006,0.994
+Shchedrist SDR/1,Early selection cultivar,3,0.036,0.029,0.935
+Yedyna JED/1,Early selection cultivar,3,0.019,0.023,0.958
+Oleh OLE/1,Landrace,1,0.99,0.001,0.008
+Heneralska GEN/1,Early selection cultivar,1,0.905,0.009,0.085
+Drogan's Yellow DRO/1,Early selection cultivar,3,0.002,0.015,0.983
+Plena PLE/1,Wild,2,0,1,0
+AVCV1,Early selection cultivar,1,0.999,0.001,0
+AVCV2,Wild,2,0.001,0.999,0
+AVCV3,Wild,3,0,0.905,0.095
+AVCV4,Wild,2,0,1,0
+AVCV5,Wild,2,0,0.998,0.002
+AVCV6,Wild,2,0.003,0.997,0
+AVCV7,Wild,1,0.907,0.037,0.056
+AVCV8,Wild,2,0,0.935,0.065
+Mykhailivska chorna AVLV1,NA,1,0.999,0.001,0
+AVKV1,Wild,2,0,1,0
+Dönissens Gelbe 110,Early selection cultivar,1,0.993,0.006,0.001
+Margit 10,Modern cultivar,1,0.996,0.004,0
+Folfer® 223,Modern cultivar,2,0.028,0.972,0
+Adriana 220,Modern cultivar,2,0.136,0.819,0.046
+Sato Nishiki 34,Modern cultivar,2,0,0.994,0.006
+Napoleon 92,Early selection cultivar,3,0.051,0.176,0.773
+Xapata 130,Landrace,2,0,1,0
+Jaboulay 108,Early selection cultivar,2,0.196,0.268,0.536
+Scwecja A. 41,Modern cultivar,2,0.004,0.996,0
+Regina REG,Modern cultivar,2,0.008,0.927,0.066
+Burlat 77,Early selection cultivar,2,0.007,0.984,0.009
+Garnet 97,Modern cultivar,1,0.996,0.003,0.001
+Lapins LAP,Modern cultivar,3,0.505,0.028,0.467
+Saint Georges 107,Landrace,2,0,1,0
+Cristobalina 19,Landrace,2,0,1,0
+Tunisian cv. / Barg,Modern cultivar,2,0.032,0.941,0.027

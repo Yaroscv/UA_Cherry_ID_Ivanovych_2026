@@ -1,0 +1,314 @@
+---
+title: "UA Cherry ID — Direct-match & Paternity testing (Familias replacement)"
+subtitle: "Familias-style search over the ECPGR 2021 (Ordidge + Barreneche) 14-SSR reference"
+author: "Yaroslav Ivanovych"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: show
+    df-print: paged
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+## What this does
+
+Reproduces the Familias *Blind search* relationships in R, without the GUI:
+
+* **Direct-match** (clone / true-to-type / synonym)
+* **Parent–Child**
+* optional, exploratory: **Full-sib**, **Half-sib**, **Cousins**
+
+Per-locus IBD likelihoods `P(genotypes | IBD = 0,1,2)` follow Milligan (2003, *Genetics*
+163:1153); realised IBD (κ0,κ1,κ2) are estimated by ML; kinship φ = κ1/4 + κ2/2 and
+**r = 2·φ = κ1/2 + κ2**. Output columns mirror the Familias blind-search list, plus **r**
+and a triage **Note**.
+
+> **Reliability.** 14 SSRs resolve **clone** and **parent–child** well. Full/half-sib and
+> cousins are shown only if you ask for them and are *not* reliable at 14 (let alone 6) SSRs —
+> read them as hypotheses to check, not conclusions. See the 6-locus note at the end.
+
+## Parameters — edit here
+
+```{r params}
+setwd("C:/R/UA_Cherry_ID/")                       # project root
+geno_file  <- "C:/R/UA_Cherry_ID/data/ECPGR_2021_Ordidge_Barreneche_Cherry DB.txt"
+#geno_file  <- "C:/R/UA_Cherry_ID/data/EU Cherry Barreneche, 2021, 14 SSR - 314 genotypes. 14 SSR data.txt"
+
+freq_file  <- "C:/R/UA_Cherry_ID/data/AFP_ECPGR_Sw.Cherry ID - Ordidge_Barreneche, 2021, ECPGR - Familias_recalc.txt"
+#query_file  <- "C:/R/UA_Cherry_ID/data/UKR_Cherry_90_harmonised_query.txt"
+query_file <- NULL  # optional: path to YOUR samples (same wide data format, e.g. harmonised UKR).
+                     # If set, those samples are searched against the reference DB.
+query_names<- NULL   # or restrict to names already in the DB, e.g. readLines("ukr_query_ids.txt")
+query_vs_db_only <- TRUE  # TRUE = Accession 2 is reference-DB only (drop query-vs-query rows)
+
+results_dir<- "C:/R/UA_Cherry_ID/results/cherry_ID"
+out_prefix <- "ECPGR_2021_Ordidge_Barreneche_Cherry_ID_matches_R_test_2"
+#out_prefix <- "UKR_Cherry_vs_EU.Cherry_Barreneche_Cherry_ID_matches"
+
+search_modes    <- c("Direct-match", "Parent-Child")   # "Parent-Child" add "Full-sib","Half-sib","Cousins"
+match_threshold <- 1     # Direct-match: max mismatching loci
+pc_max_incons   <- 1     # Parent-Child: max Mendelian (IBS=0) loci
+min_overlap     <- 6     # min co-typed loci for a pair to be reported
+bin_tol         <- 1     # allele match tolerance in bp (1 = merge 151/152-type wobble; 0 = exact)
+mutation_rate   <- 0     # 0 = as Familias (no mutation); >0 gives 1-inconsistency PC pairs a small LR
+dm_lr_min       <- 1   #1e4 # Direct-match: min LR to report (0 = all; raise to keep only rare-genotype clones)
+rel_share_min   <- 0   #0.50 relatives prefilter: min fraction of shared alleles
+rel_lr_min      <- 100   # relatives: min LR to report a Full/Half-sib or Cousin row
+```
+
+## Load data (+ optional query file)
+
+```{r load}
+read_geno <- function(path) read.table(path, sep = "\t", header = TRUE, check.names = FALSE,
+                                       quote = "", comment.char = "", stringsAsFactors = FALSE)
+db <- read_geno(geno_file)
+loci <- unique(sub(" [12]$", "", colnames(db)[-1])); L <- length(loci)
+
+build_mat <- function(d, loci) {
+  s <- as.character(d[[1]]); n <- length(s)
+  A1 <- matrix(0L, n, L); A2 <- matrix(0L, n, L)
+  for (k in seq_along(loci)) {
+    c1 <- paste0(loci[k], " 1"); c2 <- paste0(loci[k], " 2")
+    a <- if (c1 %in% colnames(d)) suppressWarnings(as.integer(d[[c1]])) else rep(0L, n)
+    b <- if (c2 %in% colnames(d)) suppressWarnings(as.integer(d[[c2]])) else rep(0L, n)
+    a[is.na(a)] <- 0L; b[is.na(b)] <- 0L; A1[, k] <- a; A2[, k] <- b
+  }
+  list(samp = s, A1 = A1, A2 = A2)
+}
+m <- build_mat(db, loci); samp <- m$samp; A1 <- m$A1; A2 <- m$A2
+
+is_query_file <- !is.null(query_file)
+if (is_query_file) {
+  q <- build_mat(read_geno(query_file), loci)
+  samp <- c(samp, q$samp); A1 <- rbind(A1, q$A1); A2 <- rbind(A2, q$A2)
+  query_idx <- (length(m$samp) + 1):length(samp)
+}
+n <- length(samp)
+miss <- (A1 == 0L | A2 == 0L)
+lo <- pmin(A1, A2); hi <- pmax(A1, A2); lo[miss] <- 0L; hi[miss] <- 0L
+
+# allele frequencies (exact; no global binning)
+fl <- sub("\r$", "", readLines(freq_file, warn = FALSE)); freq <- list(); cur <- NULL
+for (ln in fl) {
+  if (ln == "") next
+  f <- strsplit(ln, "\t")[[1]]
+  if (length(f) == 1 || (length(f) >= 2 && f[2] == "")) {
+    cur <- trimws(f[1]); if (!(cur %in% names(freq))) freq[[cur]] <- numeric(0); next }
+  al <- suppressWarnings(as.integer(f[1])); fr <- suppressWarnings(as.numeric(f[2]))
+  if (!is.na(al) && !is.na(fr)) freq[[cur]][as.character(al)] <- fr
+}
+eps <- 1e-6
+pf  <- function(loc, a) { v <- freq[[loc]][as.character(a)]; if (length(v) == 0 || is.na(v)) eps else max(v, eps) }
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+cat(sprintf("Reference %d samples; total %d; %d loci; bin_tol=%d bp.\n",
+            length(m$samp), n, L, bin_tol))
+```
+
+## Core functions
+
+```{r functions}
+# local per-pair snap: move each Y allele onto an X allele if within bin_tol (fixes 1 bp wobble
+# WITHOUT merging distinct alleles globally). X,Y are length-2 sorted integer vectors.
+snapY <- function(X, Y) {
+  if (bin_tol <= 0) return(Y)
+  for (i in 1:2) if (!(Y[i] %in% X)) { d <- abs(X - Y[i]); w <- which(d <= bin_tol)
+    if (length(w)) Y[i] <- X[w[1]] }
+  sort(Y)
+}
+
+# Milligan per-locus IBD-state likelihoods c(L0,L1,L2)
+L012 <- function(loc, xa, xb, ya, yb) {
+  pa <- pf(loc,xa); pb <- pf(loc,xb); pc <- pf(loc,ya); pd <- pf(loc,yb)
+  xh <- xa == xb; yh <- ya == yb
+  if (xh && yh) { if (xa == ya) return(c(pa^4, pa^3, pa^2)) else return(c(pa^2*pc^2, 0, 0)) }
+  if (xh && !yh) { if (xa == ya || xa == yb) { po <- if (xa == ya) pd else pc
+      return(c(2*pa^3*po, pa^2*po, 0)) }; return(c(2*pa^2*pc*pd, 0, 0)) }
+  if (yh && !xh) { if (ya == xa || ya == xb) { po <- if (ya == xa) pb else pa
+      return(c(2*pc^3*po, pc^2*po, 0)) }; return(c(2*pc^2*pa*pb, 0, 0)) }
+  if (setequal(c(xa,xb), c(ya,yb))) return(c(4*pa^2*pb^2, pa*pb*(pa+pb), 2*pa*pb))
+  sh <- intersect(c(xa,xb), c(ya,yb))
+  if (length(sh) == 1) { i <- sh; j <- if (xa == i) xb else xa; k <- if (ya == i) yb else ya
+    pi <- pf(loc,i); pj <- pf(loc,j); pk <- pf(loc,k); return(c(4*pi^2*pj*pk, pi*pj*pk, 0)) }
+  c(4*pa*pb*pc*pd, 0, 0)
+}
+
+KAPPA <- list(`Parent-Child` = c(0,1,0), `Full-sib` = c(.25,.5,.25),
+              `Half-sib` = c(.5,.5,0), `Cousins` = c(.75,.25,0))
+relLR <- function(M, kap) { num <- kap[1]*M[,1] + kap[2]*M[,2] + kap[3]*M[,3]
+  prod(ifelse(M[,1] > 0, num / M[,1], 0)) }
+
+ml_kappa <- function(M) {
+  negll <- function(par) { k0 <- par[1]; k1 <- par[2]; k2 <- 1-k0-k1
+    if (k0 < -1e-9 || k1 < -1e-9 || k2 < -1e-9) return(1e12)
+    v <- k0*M[,1] + k1*M[,2] + k2*M[,3]; if (any(v <= 0)) return(1e12); -sum(log(v)) }
+  gr <- seq(0,1,0.1); best <- list(val = Inf, par = c(1,0))
+  for (k0 in gr) for (k1 in gr[gr <= 1-k0]) { v <- negll(c(k0,k1))
+    if (v < best$val) best <- list(val = v, par = c(k0,k1)) }
+  op <- optim(best$par, negll, method = "Nelder-Mead", control = list(reltol = 1e-8))
+  k <- c(op$par[1], op$par[2], 1-op$par[1]-op$par[2]); k <- pmax(k, 0); k/sum(k)
+}
+
+pair_full <- function(i, j) {
+  ov <- 0L; sh <- 0L; ibs2 <- 0L; ibs1 <- 0L; ibs0 <- 0L
+  dmLR <- 1; dm_inc <- 0L; M <- list()
+  for (k in seq_len(L)) {
+    if (lo[i,k] == 0 || lo[j,k] == 0) next
+    ov <- ov + 1L
+    X <- c(lo[i,k], hi[i,k]); Y <- snapY(X, c(lo[j,k], hi[j,k]))
+    xa <- X[1]; xb <- X[2]; ya <- Y[1]; yb <- Y[2]
+    ms <- if (xa == xb) (ya == xa) + (yb == xa)
+          else as.integer(ya == xa || yb == xa) + as.integer(ya == xb || yb == xb)
+    sh <- sh + ms
+    if (ms == 2L) ibs2 <- ibs2 + 1L else if (ms == 1L) ibs1 <- ibs1 + 1L else ibs0 <- ibs0 + 1L
+    if (ms == 2L) { pgt <- if (xa == xb) pf(loci[k],xa)^2 else 2*pf(loci[k],xa)*pf(loci[k],xb)
+      dmLR <- dmLR / pgt } else dm_inc <- dm_inc + 1L
+    M[[length(M)+1]] <- L012(loci[k], xa, xb, ya, yb)
+  }
+  M <- do.call(rbind, M); k <- ml_kappa(M)
+  phi <- k[2]/4 + k[3]/2
+  list(ov = ov, sh = sh, ibs2 = ibs2, ibs1 = ibs1, ibs0 = ibs0,
+       dmLR = dmLR, dm_inc = dm_inc, M = M, k0 = k[1], k1 = k[2], k2 = k[3],
+       phi = phi, r = 2*phi,
+       pcLR = relLR(M, KAPPA[["Parent-Child"]]),
+       pc_inc = sum(M[,2] <= 0))
+}
+```
+
+## Screening (query × database, with ±bin_tol tolerance)
+
+```{r screen}
+if (exists("query_idx")) {
+  qidx <- query_idx
+} else if (!is.null(query_names)) {
+  qidx <- match(query_names, samp); qidx <- qidx[!is.na(qidx)]
+} else {
+  qidx <- seq_len(n)
+}
+allvsall <- !exists("query_idx") && is.null(query_names)
+
+cand <- list()
+for (qi in qidx) {
+  if (allvsall) {
+    js <- if (qi == n) integer(0) else (qi+1):n
+  } else {
+    js <- setdiff(seq_len(n), qi)
+    if (query_vs_db_only) {
+      js <- js[ !(js %in% qidx) ]           # Accession 2 = reference DB only
+    } else {
+      js <- js[ !(js %in% qidx & js < qi) ] # keep query-query pairs, reported once
+    }
+  }
+  if (!length(js)) next
+  ov <- integer(length(js)); ms2 <- integer(length(js)); ibs0 <- integer(length(js)); shf <- integer(length(js))
+  for (k in seq_len(L)) {
+    xl <- lo[qi,k]; xh <- hi[qi,k]; if (xl == 0) next
+    yl <- lo[js,k]; yh <- hi[js,k]; typed <- yl != 0
+    if (xl == xh) sK <- (abs(yl-xl) <= bin_tol) + (abs(yh-xl) <= bin_tol)
+    else sK <- as.integer(abs(yl-xl) <= bin_tol | abs(yh-xl) <= bin_tol) +
+               as.integer(abs(yl-xh) <= bin_tol | abs(yh-xh) <= bin_tol)
+    sK[!typed] <- 0L
+    ov <- ov + typed; shf <- shf + sK
+    ms2 <- ms2 + (sK == 2L & typed); ibs0 <- ibs0 + (sK == 0L & typed)
+  }
+  mism <- ov - ms2; frac <- ifelse(ov > 0, shf/(2*ov), 0)
+  ok <- ov >= min_overlap
+  want_rel <- any(c("Full-sib","Half-sib","Cousins") %in% search_modes)
+  pick <- which(ok & ( (mism <= match_threshold) | (ibs0 <= pc_max_incons) |
+                       (want_rel & frac >= rel_share_min) ))
+  for (t in pick) cand[[length(cand)+1]] <- c(qi, js[t])
+}
+cat(sprintf("Candidate pairs after screening: %d\n", length(cand)))
+```
+
+## Build the Familias-style table
+
+```{r build}
+rows <- list()
+mk <- function(i, j, rel, LR, inc, p, note) data.frame(
+  `Accession 1` = samp[i], `Accession 2` = samp[j], Relationship = rel, LR = LR,
+  Inconsistencies = inc, `Overlapping markers` = p$ov, Cluster = NA_integer_, `Shared alleles` = p$sh,
+  `IBS=2` = p$ibs2, `IBS=1` = p$ibs1, `IBS=0` = p$ibs0, `Kinship coefficient` = round(p$phi,4),
+  Kappa0 = round(p$k0,3), Kappa1 = round(p$k1,3), Kappa2 = round(p$k2,3),
+  `Coefficient of relationship r` = round(p$r,4), Note = note,
+  check.names = FALSE, stringsAsFactors = FALSE)
+
+for (c1 in cand) {
+  i <- c1[1]; j <- c1[2]; p <- pair_full(i, j)
+  is_clone <- p$dm_inc <= match_threshold
+  if ("Direct-match" %in% search_modes && is_clone && p$dmLR >= dm_lr_min)
+    rows[[length(rows)+1]] <- mk(i, j, "Direct-match", p$dmLR, p$dm_inc, p, "clone/synonym")
+  if ("Parent-Child" %in% search_modes && p$pc_inc <= pc_max_incons && !is_clone) {
+    note <- if (p$k2 < 0.05 && abs(p$r - 0.5) <= 0.10) "P-O candidate" else "sib/relative (k2>0)"
+    rows[[length(rows)+1]] <- mk(i, j, "Parent-Child", p$pcLR, p$pc_inc, p, note)
+  }
+  for (rl in intersect(c("Full-sib","Half-sib","Cousins"), search_modes)) {
+    LR <- relLR(p$M, KAPPA[[rl]])
+    if (LR >= rel_lr_min && !is_clone)
+      rows[[length(rows)+1]] <- mk(i, j, rl, LR, p$ibs0, p, "exploratory (>=14 SSR unreliable)")
+  }
+}
+res <- if (length(rows)) do.call(rbind, rows) else data.frame()
+
+if (nrow(res)) {
+  # clusters = connected components of the Direct-match graph
+  parent <- seq_len(n)
+  find <- function(x) { while (parent[x] != x) x <- parent[x]; x }   # read-only union-find
+  dm <- res[res$Relationship == "Direct-match", ]
+  for (r in seq_len(nrow(dm))) {
+    a <- match(dm[["Accession 1"]][r], samp); b <- match(dm[["Accession 2"]][r], samp)
+    ra <- find(a); rb <- find(b); if (ra != rb) parent[ra] <- rb
+  }
+  cl <- as.integer(factor(sapply(seq_len(n), find)))
+  res$Cluster <- cl[match(res[["Accession 1"]], samp)]
+  res <- res[order(factor(res$Relationship, levels = c("Direct-match","Parent-Child","Full-sib","Half-sib","Cousins")),
+                   -res$LR), ]
+  outfile <- file.path(results_dir, paste0(out_prefix, ".txt"))
+  write.table(res, outfile, sep = "\t", row.names = FALSE, quote = FALSE)
+  cat("written: ", outfile, "\n")
+  cat(sprintf("Direct-match: %d | Parent-Child: %d | other: %d\n",
+      sum(res$Relationship=="Direct-match"), sum(res$Relationship=="Parent-Child"),
+      sum(!res$Relationship %in% c("Direct-match","Parent-Child"))))
+}
+knitr::kable(head(res, 40), digits = 4)
+```
+
+## Verification ("double check")
+
+```{r verify}
+s <- pair_full(1, 1)
+stopifnot(s$ibs2 == s$ov, abs(s$k2 - 1) < 1e-2, abs(s$r - 1) < 1e-2, s$pc_inc == 0)   # self = clone
+ii <- match("Iputj [LVA001018]", samp); jj <- match("Iput [EST012-020]", samp)         # known synonym
+if (!is.na(ii) && !is.na(jj)) print(unlist(pair_full(ii, jj)[c("ibs2","dm_inc","k2","r")]))
+if (nrow(res)) {
+  cat(sprintf("max |phi-(k1/4+k2/2)| = %.3g ; max |r-2phi| = %.3g\n",
+      max(abs(res$`Kinship coefficient` - (res$Kappa1/4 + res$Kappa2/2))),
+      max(abs(res$`Coefficient of relationship r` - 2*res$`Kinship coefficient`))))
+}
+```
+
+## Notes on the 6-locus query, and on tolerance
+
+* **`query_file`**: put your samples (harmonised, same wide format) in a separate file and set
+  `query_file`; they are appended to the reference and searched against it (and against each other).
+  Only loci present in both are compared, so a UKR sample typed at the **6 ECPGR-overlap loci**
+  yields `Overlapping markers = 6`.
+* **6-locus reliability.** The search *runs* fine at 6 loci, but 6 SSRs carry far less power:
+  a Direct-match at 6 loci can be coincidental. **Judge 6-locus hits by the LR, not the
+  inconsistency count** — a clone needs a high Direct-match LR (rare multilocus genotype);
+  a low LR means the genotype is common and the "match" may be chance. Parent-child at 6 loci
+  is weak and full/half-sib essentially uninformative — treat those as leads only.
+* **`bin_tol` (default 1 bp)** applies a *local per-pair* snap (e.g. 151↔152), which fixes
+  cross-dataset binning wobble (as in the two Aelita records) and reproduces Familias, **without**
+  globally merging distinct alleles. Set `bin_tol = 0` for exact integer matching.
+* **Note column**: `P-O candidate` (κ2 ≈ 0 and r ≈ 0.5) vs `sib/relative (k2>0)` — use it to tell a
+  true parent–offspring from a full-sib inside a matched cluster (14 SSRs cannot separate them by
+  inconsistencies alone).
+
+```{r session}
+sessionInfo()
+```

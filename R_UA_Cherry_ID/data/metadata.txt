@@ -1,0 +1,95 @@
+N_n	sample_name	aprior_name	posterior_name	clone_of	status	origin	S_genotype	CIG	PavCNR12_genotype
+1	VAL/3	Valerii Chkalov	ACC_VAL3	NA	NA	Ukraine	S3/S6	VI	1/3
+2	MEL/2	Melitopolska chorna	Melitopolska chorna		Modern cultivar	Ukraine	S5/S13	XXVI	1/1
+3	ANO/4	Anons	Anons		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+4	TAL/4	Talisman	Talisman		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+5	KRU/4	Krupnoplidna	Krupnoplidna		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+6	SKA/3	Kazka	Kazka		Modern cultivar	Ukraine	S1/S9	XVIII	1/3
+7	MEM/1	Melitopolska myrna	Melitopolska myrna		Modern cultivar	Ukraine	S1/S9	XVIII	1/1
+8	TEM/1-2	Temporion	Temporion		Modern cultivar	Ukraine	S3/S4	ІІІ	1/1
+9	PRS/1	Prostir	Prostir		Modern cultivar	Ukraine	S3/S9	XVI	1/2
+10	PRE/1	Prestyzhna	Prestyzhna		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+11	ANS/1	Anshlah	Anshlah		Modern cultivar	Ukraine	S1/S9	XVIII	1/2
+12	LAS/1	Lasunia	Lasunia		Modern cultivar	Ukraine	S5/S9	XXXVII	1/3
+13	MIR/1	Mirazh	Mirazh		Modern cultivar	Ukraine	S1/S9	XVIII	1/1
+14	ZOD/1	Zodiak	Zodiak		Modern cultivar	Ukraine	S5/S13	XXVI	1/1
+15	SAN/1	Shans	Shans		Modern cultivar	Ukraine	S3/S6	VI	1/3
+16	PRY/3	Prysadybna	Prysadybna		Early selection cultivar	Ukraine	S6/S9	X	1/1
+17	ELE/2	Elektra	Elektra		Modern cultivar	Ukraine	S1/S9	XVIII	1/1
+18	DAC/1	Dachnytsia	Dachnytsia		Modern cultivar	Ukraine	S5/S9	XXXVII	1/2
+19	PRO/2	Proshchalna Taranenko	Proshchalna Taranenko		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+20	VAS/3	Vasylysa prekrasna	Vasylysa prekrasna		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+21	DON/1	Donetska krasavytsia	ACC_DON1	NA	NA	Ukraine	S3/S9	XVI	1/1
+22	DON/2	Donetska krasavytsia	ACC_DON2	Donetska krasavytsia	Modern cultivar	Ukraine	S3/S9	XVI	1/2
+23	OTR/1-3	Otrada	Otrada	Otrada	Modern cultivar	Ukraine	S3/S5	VII	1/1
+24	OTR/2	Otrada	Otrada	Otrada	Modern cultivar	Ukraine	S3/S5	VII	NA
+25	ANN/1	Annushka	Annushka	Annushka	Modern cultivar	Ukraine	S3/S4	ІІІ	1/1
+26	TAY/1	Taina	Annushka	Annushka	Modern cultivar	Ukraine	S3/S4	ІІІ	1/1
+27	ETY/2	Etyka	Etyka		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+28	YAR/1	Yaroslavna	ACC_YAR1	NA	NA	Ukraine	S3/S5	VII	1/1
+29	YAR/2	Yaroslavna	Yaroslavna	Yaroslavna	Modern cultivar	Ukraine	S3/S5	VII	1/2
+30	DNN/1	Donchanka	Donchanka		Modern cultivar	Ukraine	S4/S5	V	1/1
+31	DZE/1	Dzherelo	Dzherelo		Early selection cultivar	Ukraine	S6/S9	X	1/1
+32	VLR/1	Valeriia	Valeriia		Modern cultivar	Ukraine	S1/S4	IX	1/1
+33	DOU/1	Donetskyi uholok	Donetskyi uholok		Modern cultivar	Ukraine	S3/S5	VII	1/2
+34	SES/1	Siestronka	ACC_SES1	Biriuza?	Early selection cultivar	Ukraine	S1/S6	XX	NA
+35	SES/2	Siestronka	Siestronka	Siestronka	Early selection cultivar	Ukraine	S3/S5	VII	1/1
+36	ZEL/1	Zheltochek	Zheltochek		Early selection cultivar	Ukraine	S3/S5	VII	NA
+37	RAR/1	Rannia rozova	Rannia rozova		Early selection cultivar	Ukraine	S3/S5	VII	1/1
+38	AMZ/1	Amazonka	Amazonka		Modern cultivar	Ukraine	S4/S5	V	NA
+39	STD/1	Studentka	Studentka		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+40	DOR/1	Donetska rannia	Donetska rannia		Early selection cultivar	Ukraine	S2/S9	XLIII	1/1
+41	AEL/1	Aelita	Aelita		Modern cultivar	Ukraine	S5/S9	XXXVII	1/1
+42	RUK/1	Ruksandra	Ruksandra		Modern cultivar	Ukraine	S3/S4	ІІІ	NA
+43	LES/1	Lesia	Lesia		Early selection cultivar	Ukraine	S6/S9	X	1/1
+44	58-52/1	D 58-52	D 58-52		Modern cultivar	Ukraine	S1/S9	XVIII	1/3
+45	44-15/1	D 44-15	D 44-15		Modern cultivar	Ukraine	S5/S9	XXXVII	NA
+46	NIJ/2	Nizhnist	ACC_NIJ2	NA	Early selection cultivar	Ukraine	S6/S17	O	3/3
+47	LUB/3	Liubava	Liubava		Modern cultivar	Ukraine	S4/S5	V	1/2
+48	KYT/3	Kytaivska chorna	ACC_KYT3	NA	Early selection cultivar	Ukraine	S4/S6	XVII	2/3
+49	LEG/1	Lehenda Mliieva	Lehenda Mliieva	Lehenda Mliieva	Modern cultivar	Ukraine	S6/S9	X	1/1
+50	DAR/1	Dar Mliieva	Dar Mliieva		Modern cultivar	Ukraine	S5/S6	XV	1/1
+51	KRL/1	Koralova	Koralova		Early selection cultivar	Ukraine	S1/S6	XX	1/1
+52	ZOR/1	Zoriana	Lehenda Mliieva	Lehenda Mliieva	Modern cultivar	Ukraine	S6/S9	X	1/1
+53	BIR/1	Biriuza	Biriuza (could not be excluded)		Early selection cultivar	Ukraine	S1/S6	XX	1/1
+54	NAY/1	Naiada	Naiada		Early selection cultivar	Ukraine	S5/S13	XXVI	NA
+55	NEK/1	Nektarna	Nektarna		Early selection cultivar	Ukraine	S5/S6	XV	1/3
+56	JUB/1	Yuvileina mliivska	Yuvileina mliivska		Early selection cultivar	Ukraine	S1/S3	II	1/2
+57	CRN/1	Chervneva	Chervneva		Early selection cultivar	Ukraine	S4/S12	XXVII	NA
+58	MLI/1	Mliivska chorna	Mliivska chorna		Early selection cultivar	Ukraine	S1/S6	XX	1/3
+59	VES/1	Veselka	Veselka		Early selection cultivar	Ukraine	S3/S5	VII	1/1
+60	ABO/1	Aboryhenka	Aboryhenka		Early selection cultivar	Ukraine	S1/S3	II	1/2
+61	POK/1	Pokazkova	Pokazkova		Early selection cultivar	Ukraine	S3/S6	VI	1/2
+62	SDR/1	Shchedrist	Shchedrist		Early selection cultivar	Ukraine	S3/S9	XVI	1/1
+63	JED/1	Yedyna	Yedyna		Early selection cultivar	Ukraine	S6/S17	O	1/2
+64	OLE/1	Oleh	Oleh	Oleh	Landrace	Ukraine	S1/S9	XVIII	NA
+65	OLE/2	Oleh	Oleh	Oleh	Landrace	Ukraine	S1/S9	XVIII	NA
+66	GEN/1	Heneralska	Heneralska		Early selection cultivar	Ukraine	S1/S9/SX1	–	1/3
+67	DRO/1	Drogans gelbe Knorpel.	Dönissens gelbe Knorpel.	Dönissens gelbe Knorpel.	Early selection cultivar	Germany	S3/S6	VI	1/3
+68	PLE/1	Plena (Multiplex, Grandiflora)	Plena (Multiplex, Grandiflora)		Wild	England	S29/SX2	–	3/3
+69	AVCV1	AVCV1	AVCV1		Early selection cultivar	Ukraine	S1/S4	IX	NA
+70	AVCV2	AVCV2	AVCV2		Wild	Ukraine	S6/SX3	–	NA
+71	AVCV3	AVCV3	AVCV3		Wild	Ukraine	S18/Snull	–	NA
+72	AVCV4	AVCV4	AVCV4		Wild	Ukraine	S6/S14/SX1	–	3/3
+73	AVCV5	AVCV5	AVCV5		Wild	Ukraine	S10/Snull	–	NA
+74	AVCV6	AVCV6	AVCV6		Wild	Ukraine	S3/Snull	–	NA
+75	AVCV7	AVCV7	AVCV7		Wild	Ukraine	S3/S4	ІІІ	NA
+76	AVCV8	AVCV8	AVCV8		Wild	Ukraine	S6/S7	XXX	NA
+77	AVLV1	Mykhailivska chorna	ACC_AVLV1	NA	NA	NA	S1/S4	IX	NA
+78	AVKV1	AVKV1	AVKV1		Wild	Ukraine	S12/S17	O	NA
+79	110	Dönissens gelbe Knorpel.	Drogans gelbe Knorpel.	Drogans gelbe Knorpel.	Early selection cultivar	Germany	S1/S5	XIV	1/2
+80	10	Margit	Margit		Modern cultivar	Hungary	S4/S12	XXVII	NA
+81	223	Folfer	Folfer		Modern cultivar	France	S6/S9	X	NA
+82	220	Adriana	Adriana		Modern cultivar	Italy	S1/S14	XXXIII	NA
+83	34	Sato Nishiki	Sato Nishiki		Modern cultivar	Japan	S3/S6	VI	NA
+84	92	Napoleon	Napoleon		Early selection cultivar	Germany	S3/S4	ІІІ	1/2
+85	130	Xapata	Xapata		Landrace	France	S3/S14	XXXI	1/3
+86	108	Bigarreau Jaboulay	Bigarreau Jaboulay		Early selection cultivar	France	S6/S9	X	1/3
+87	41	Scwecja A.	Scwecja A.		Modern cultivar	Switzerland	S3/S6	VI	NA
+88	REG	Regina	Regina		Modern cultivar	Germany	S1/S3	II	1/2
+89	77	Bigarreau Hâtif Burlat	Bigarreau Hâtif Burlat		Early selection cultivar	France	S3/S9	XVI	1/1
+90	97	Garnet	Garnet		Modern cultivar	USA	S1/S4	IX	NA
+91	LAP	Lapins	Lapins		Modern cultivar	Canada	S1/S4'	IX	1/2
+92	107	Saint Georges	Saint Georges		Landrace	France	S5/S6	XV	1/1
+93	19	Cristobalina	Cristobalina		Landrace	Spain	S3/S6	SC	1/3'
+94	Tunisian	Tunisian cv.	Tunisian cv.		NA	Tunisia	S3/S9	XVI	NA

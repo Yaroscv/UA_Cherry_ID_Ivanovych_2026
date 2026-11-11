@@ -1,0 +1,2078 @@
+---
+title: "UA_Cherry_ID_DAPC"
+author: "Yarosslav Ivanovych"
+format: html
+editor: visual
+---
+
+#DAPC_Prep_v1
+
+```{r}
+# ============================================================
+#  DAPC v1 — front-end for sweet cherry SSR + S-locus data
+#  Drop-in replacement for EABUA_DAPC sections 1–6 (the FASTA loader).
+#  Produces: gi (diploid codominant genind), pop(gi), results_dir
+#  Hands off UNCHANGED to v14 sub+ section "6b. Data-driven n.pca" onward.
+#
+#  Input: UKR_Sw_Cherry_ID__18_SSR___3__S-locus__data.txt
+#    94 accessions × 21 loci (18 SSR + 3 S-locus), two allele columns/locus,
+#    tab-separated, missing coded '*', diploid allele sizes in bp.
+# ============================================================
+
+# --- 0. Packages ----
+library(adegenet)
+library(ade4)        # used downstream by section 6b
+
+# --- 1. Config ----
+setwd("C:/R/UA_Cherry_ID/")           # set to your project root if needed
+geno_path <- "C:/R/UA_Cherry_ID/data/UKR_Sw_Cherry_ID_18_SSR_3_S-locus_data.txt"
+
+# Marker set:
+#   "SSR"   = 18 neutral microsatellites only   (PRIMARY analysis; default)
+#   "SSR_S" = all 21 loci incl. 3 S-locus markers (SENSITIVITY run only)
+# PaConsI / PaConsII / F-box all tag the self-incompatibility S-locus:
+# non-neutral (balancing selection) and mutually linked. Including them
+# violates DAPC's neutral/independent-locus assumption and over-weights a
+# single genomic region — keep them OUT of the primary run.
+marker_set <- "SSR"
+
+# Clone handling:
+#   Identity work shows only a FEW accessions are true duplicates, so we do
+#   NOT auto-collapse. The script only REPORTS exact-genotype matches for
+#   your review. Set TRUE only if you decide to keep one per match group.
+clone_correct <- FALSE
+
+# --- 2. Read genotype table ----
+raw <- read.delim(geno_path, header = TRUE, sep = "\t",
+                  na.strings   = c("*", "", "NA"),
+                  check.names  = FALSE,
+                  colClasses   = "character",   # keep allele sizes as codes
+                  stringsAsFactors = FALSE)
+
+id_col <- names(raw)[1]                                   # "Sample Name"
+raw    <- raw[!is.na(raw[[id_col]]) & raw[[id_col]] != "", ]   # drop blank rows
+ids    <- trimws(raw[[id_col]])
+if (anyDuplicated(ids))
+  stop("Duplicate sample IDs: ", paste(ids[duplicated(ids)], collapse = ", "))
+rownames(raw) <- ids
+cat(sprintf("Read %d accessions, %d allele columns.\n",
+            nrow(raw), length(names(raw)) - 1))
+
+# --- 3. Identify loci from the "<locus> 1" / "<locus> 2" column pairs ----
+allele_cols  <- setdiff(names(raw), id_col)
+locus_of_col <- sub("\\s+\\d+$", "", allele_cols)   # strip trailing " 1"/" 2"
+loci_all     <- unique(locus_of_col)                # 21 loci, in file order
+
+s_markers <- c("PaConsI", "PaConsII", "F-box")
+ssr_loci  <- setdiff(loci_all, s_markers)           # 18 SSRs
+
+loci_keep <- switch(marker_set,
+  "SSR"   = ssr_loci,
+  "SSR_S" = loci_all,
+  stop("marker_set must be 'SSR' or 'SSR_S'"))
+
+cat(sprintf("\nMarker set '%s': %d loci\n", marker_set, length(loci_keep)))
+cat("  ", paste(loci_keep, collapse = ", "), "\n", sep = "")
+
+# --- 4. Combine each locus's two allele columns into 'a1/a2' genotypes ----
+# Missing ('*') is always paired in this file (both alleles '*'), so a locus
+# is either fully typed or fully missing -> set NA if either allele is NA.
+geno <- vapply(loci_keep, function(L) {
+  a1 <- trimws(raw[[paste0(L, " 1")]])
+  a2 <- trimws(raw[[paste0(L, " 2")]])
+  g  <- paste(a1, a2, sep = "/")
+  g[is.na(a1) | is.na(a2) | a1 == "" | a2 == ""] <- NA
+  g
+}, character(nrow(raw)))
+geno <- as.data.frame(geno, stringsAsFactors = FALSE)
+rownames(geno) <- rownames(raw)
+colnames(geno) <- loci_keep
+
+# --- 5. Build diploid, codominant genind ----
+gi <- df2genind(geno,
+                ploidy    = 2,
+                sep       = "/",
+                type      = "codom",
+                ind.names = rownames(geno),
+                loc.names = colnames(geno))
+cat(sprintf("\ngenind built: %d individuals | %d loci | %d alleles total\n",
+            nInd(gi), nLoc(gi), ncol(tab(gi))))
+
+# --- 5b. Missing-data summary ----
+loc_miss <- colMeans(is.na(geno))
+ind_miss <- rowMeans(is.na(geno))
+cat("\n=== Missing data ===\n")
+cat(sprintf("  Overall missing genotypes: %.1f%%\n", 100 * mean(is.na(geno))))
+cat("  Per-locus missing (%, top 6):\n")
+print(round(100 * sort(loc_miss, decreasing = TRUE)[1:min(6, length(loc_miss))], 1))
+hi <- names(which(ind_miss > 0.20))
+if (length(hi))
+  cat(sprintf("  Individuals >20%% missing (%d): %s\n",
+              length(hi), paste(hi, collapse = ", ")))
+cat("  NOTE: udp98-022 is the weakest SSR (~28%% missing) — consider a\n")
+cat("        sensitivity run without it if it drives noisy axes.\n")
+
+# --- 6. Exact-duplicate (clone) REPORT — informational only ----
+# Flags accessions with IDENTICAL genotype AND identical missing pattern.
+# Near-identical pairs differing only at missing loci are NOT flagged.
+sig        <- apply(geno, 1, function(r)
+                    paste(ifelse(is.na(r), ".", r), collapse = "|"))
+dup_groups <- split(rownames(geno), sig)
+dup_groups <- dup_groups[lengths(dup_groups) > 1]
+
+cat("\n=== Exact multilocus-genotype matches ===\n")
+if (length(dup_groups) == 0) {
+  cat("  None — every accession has a unique genotype/missing pattern.\n")
+} else {
+  for (g in dup_groups) cat("  ", paste(g, collapse = "  =  "), "\n", sep = "")
+  cat("  (exact matches only; review against documented identity before any merge)\n")
+}
+
+if (clone_correct && length(dup_groups) > 0) {
+  keep_one <- vapply(dup_groups, `[`, character(1), 1)
+  drop_ids <- setdiff(unlist(dup_groups), keep_one)
+  gi   <- gi[!indNames(gi) %in% drop_ids, ]
+  geno <- geno[indNames(gi), , drop = FALSE]
+  cat(sprintf("  clone_correct=TRUE: removed %d duplicate(s); %d remain.\n",
+              length(drop_ids), nInd(gi)))
+}
+
+# --- 7. Population labels (COSMETIC ONLY) ----
+# Downstream clustering is UNSUPERVISED (find.clusters); pop(gi) is used only
+# by the compoplot for separators/labels. Default = one group so the handoff
+# never breaks. To overlay a priori groups (e.g. the dendrogram A/B/C bands),
+# supply a 2-column file [sample_name <tab> group] and uncomment below.
+pop(gi) <- factor(rep("all", nInd(gi)))
+
+# grp_path <- "data/apriori_groups.txt"
+# ag <- read.delim(grp_path, header = TRUE, sep = "\t",
+#                  check.names = FALSE, stringsAsFactors = FALSE)
+# m  <- ag$group[match(indNames(gi), ag$sample_name)]
+# if (any(is.na(m)))
+#   stop("No a priori group for: ", paste(indNames(gi)[is.na(m)], collapse = ", "))
+# pop(gi) <- factor(m)
+
+cat("\nPopulation labels (cosmetic):\n"); print(table(pop(gi)))
+
+# --- 8. Results folder + handoff ----
+# Named by marker_set so SSR and SSR_S outputs never overwrite each other.
+results_dir <- file.path("results", paste0("cherry_", marker_set))
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+cat("\nOutput folder:", results_dir, "\n")
+cat("Front-end complete. 'gi' is ready — continue from v14 section 6b.\n")
+```
+
+## DAPC v1
+
+```{r}
+# ============================================================
+# --- 6b. Data-driven n.pca selection ----
+# Runs PCA once to find how many PCs explain 95% of variance.
+# npca_95 replaces arbitrary n.pca=50 everywhere in the script.
+# ============================================================
+library(ade4)
+cat("Computing data-driven n.pca (PCs explaining 95% variance)...\n")
+pca_test <- dudi.pca(tab(gi, NA.method = "mean"),
+                     scannf = FALSE,
+                     nf     = min(nInd(gi) - 1, nLoc(gi)))
+cum_var  <- cumsum(pca_test$eig) / sum(pca_test$eig)
+npca_95  <- which(cum_var >= 0.95)[1]
+npca_bic <- npca_95   # used in BIC replicates
+npca_fc  <- npca_95   # used in find.clusters final run
+cat(sprintf("  Total PCs available:         %d\n", length(pca_test$eig)))
+cat(sprintf("  PCs explaining 95%% variance: %d  (npca_95)\n", npca_95))
+cat(sprintf("  --> Using n.pca = %d for all find.clusters() calls\n\n", npca_95))
+
+
+# ============================================================
+# --- 7. Replicated BIC — find optimal K (n=1000) ----
+# ============================================================
+set.seed(42)
+n_reps   <- 1000
+bic_list <- vector("list", n_reps)
+# Parameter rationale — BIC loop vs Step A:
+#
+#  BIC loop:  n_reps=1000, n.start=50, n.iter=1e5
+#    Work: 1000 x 50 x 1e5  = 5x10^9 ops  (~10 min observed on this dataset)
+#    1000 reps gives maximum BIC curve stability and tight SE bars.
+#    n.start=50 and n.iter=1e5 give reliable BIC per replicate.
+#    Further reps add negligible precision beyond n=1000.
+#
+#  Step A (run_dapc_for_k): 10 runs, n.start=500, n.iter=1e6
+#    Work: 10 x 500 x 1e6  = 5x10^9 ops  (~2-5 min per K observed)
+#    Purpose: maximum-precision definitive cluster assignment.
+#    10 independent runs with stability check ensures global optimum.
+#    This is the publication-quality result.
+cat("Running", n_reps, "replicate BIC runs — please wait...\n")
+for (i in seq_len(n_reps)) {
+  fc <- find.clusters(gi, max.n.clust = 10, n.pca = npca_bic,
+                      n.iter = 1e6, n.start = 500,   # see rationale above
+                      choose.n.clust = FALSE)
+  bic_list[[i]] <- fc$Kstat
+  if (i %% 10 == 0) cat("  completed", i, "/", n_reps, "\n")
+}
+bic_reps <- do.call(cbind, bic_list)
+bic_mean <- apply(bic_reps, 1, mean)
+bic_sd   <- apply(bic_reps, 1, sd)
+bic_se   <- bic_sd / sqrt(n_reps)
+k_vals   <- 1:10
+
+# Paper-grade BIC plot
+theme_paper()
+par(mar = c(4.5, 4.5, 3.5, 1.5))
+plot(k_vals, bic_mean,
+     type = "b", pch = 19, col = "#2166AC", lwd = 1.5,
+     xlab = "Number of clusters (K)",
+     ylab = "BIC (mean \u00b1 SE)",
+     main = paste0("BIC vs. number of clusters\n(", n_reps, " replicates)"),
+     xlim = c(1, 10), xaxt = "n")
+axis(1, at = k_vals)
+arrows(k_vals, bic_mean - bic_se, k_vals, bic_mean + bic_se,
+       angle = 90, code = 3, length = 0.04, col = "#4D4D4D", lwd = 1)
+bic_plot <- recordPlot()
+
+# K selection diagnostics
+best_k       <- k_vals[which.min(bic_mean)]
+bic_diff2    <- diff(diff(bic_mean))
+elbow_k_auto <- which.max(abs(bic_diff2)) + 1
+
+bic_table <- data.frame(
+  K         = k_vals,
+  BIC_mean  = round(bic_mean, 2),
+  BIC_SD    = round(bic_sd,   2),
+  BIC_SE    = round(bic_se,   3),
+  delta_BIC = c(NA, round(diff(bic_mean), 2))
+)
+
+cat("\n=== K selection summary ===\n")
+cat(sprintf("%-44s %d\n", "K with lowest BIC (which.min):", best_k))
+cat(sprintf("%-44s %d\n", "K at largest curvature (auto elbow):", elbow_k_auto))
+cat("\nBIC table:\n")
+cat(sprintf("%-4s  %8s  %7s  %6s  %10s\n",
+            "K","BIC_mean","BIC_SD","BIC_SE","delta_BIC"))
+cat(strrep("-", 46), "\n")
+for (i in seq_len(nrow(bic_table))) {
+  cat(sprintf("%-4d  %8.2f  %7.2f  %6.3f  %s\n",
+              bic_table$K[i], bic_table$BIC_mean[i],
+              bic_table$BIC_SD[i], bic_table$BIC_SE[i],
+              ifelse(is.na(bic_table$delta_BIC[i]), "        NA",
+                     sprintf("%10.2f", bic_table$delta_BIC[i]))))
+}
+cat(strrep("-", 46), "\n")
+cat("delta_BIC: largest negative drop marks the elbow\n")
+cat("===========================\n\n")
+
+write.csv(bic_table, file.path(results_dir, "BIC_table.csv"), row.names = FALSE, quote = FALSE)
+
+
+# SET chosen_k — elbow detection:
+# The elbow is where delta_BIC STOPS being large, not where it IS largest.
+# Method: find K where the drop ratio drops below 20% of the maximum drop.
+# This correctly identifies K=4 when drops are: -36, -47, -17, -4, -1...
+# (K=4 is where drops transition from large to small)
+bic_drops   <- abs(diff(bic_mean))             # absolute drops per K step
+drop_thresh <- max(bic_drops) * 0.20            # 20% of largest drop
+# Elbow = first K where the drop AFTER it falls below threshold
+elbow_pos   <- which(bic_drops < drop_thresh)[1]  # first 'small' drop position
+chosen_k    <- k_vals[elbow_pos]                  # K just before drops go small
+
+cat("\n=== Elbow detection ===\n")
+cat("Absolute BIC drops per K step:\n")
+for (ki in seq_along(bic_drops))
+  cat(sprintf("  K%d->K%d: %.2f%s\n", ki, ki+1, bic_drops[ki],
+              if (ki+1 == chosen_k) "  <- ELBOW" else ""))
+cat(sprintf("Drop threshold (20%% of max): %.2f\n", drop_thresh))
+cat(sprintf("Auto-detected elbow: K = %d\n", chosen_k))
+cat("Override manually if needed: chosen_k <- <value>\n")
+cat("=======================\n\n")
+
+
+# ============================================================
+# Helper: run full DAPC pipeline for a given K
+# Returns list with all objects and plots needed
+# ============================================================
+run_dapc_for_k <- function(genind_obj, k_val, label) {
+
+  cat(strrep("=", 50), "\n")
+  cat("  Running DAPC for K =", k_val, "(", label, ")\n")
+  cat(strrep("=", 50), "\n")
+
+  # Step A: find clusters — MAXIMUM PRECISION
+  # n.pca   = npca_fc  (data-driven, 95% PCA variance from section 6b)
+  # n.start = 500      (exhaustive search for global k-means optimum)
+  # n.iter  = 1e6      (full convergence, no iteration limit reached)
+  # 10 independent runs with stability check — publication quality
+  set.seed(42)
+  grp_runs <- lapply(1:10, function(s) {
+    find.clusters(genind_obj,
+                  n.clust        = k_val,
+                  n.pca          = npca_fc,
+                  n.iter         = 1e6,
+                  n.start        = 500,
+                  choose.n.clust = FALSE)
+  })
+  gs_list <- lapply(grp_runs, function(r) sort(as.vector(table(r$grp))))
+  stable  <- all(sapply(gs_list, identical, gs_list[[1]]))
+  if (stable) {
+    cat("  Stability check: PASSED (10/10 runs identical group sizes)\n")
+  } else {
+    cat("  Stability check: WARNING — group sizes differ across 10 runs\n")
+    cat("  Unexpected with n.start=500; check data quality\n")
+    for (s in seq_along(gs_list))
+      cat(sprintf("    Run %d: %s\n", s, paste(gs_list[[s]], collapse = " ")))
+  }
+  grp_k <- grp_runs[[1]]   # use first run (all equivalent if stable)
+  cat("Group sizes:\n"); print(table(grp_k$grp))
+
+  # Step B: a-score optimisation
+  # n.pca ceiling = npca_fc (data-driven) not fixed 30
+  n_da_k   <- k_val - 1
+  dapc_tmp <- dapc(genind_obj, grp_k$grp,
+                   n.pca = npca_fc,
+                   n.da  = n_da_k)
+  theme_paper()
+  par(mar = c(4.5, 4.5, 4, 1.5))
+  a_opt_k    <- optim.a.score(dapc_tmp)
+  ascore_plt <- recordPlot()
+  npca_k     <- a_opt_k$best
+  cat("Optimal n.pca:", npca_k, "\n")
+
+
+  # Step C: final DAPC
+  dapc_k <- dapc(genind_obj, grp_k$grp, n.pca = npca_k, n.da = n_da_k)
+  cat("DAPC K =", k_val, "| n.pca:", dapc_k$n.pca,
+      "| n.da:", dapc_k$n.da, "\n")
+
+  # Step D: custom scatter — DA1 vs DA2 with ellipses + eigenvalue barplot
+  pal_k  <- cluster_cols(k_val)
+  pch_k  <- c(15,16,17,18,8,11,12,13)[seq_len(k_val)]
+
+  # Extract DA scores and group assignments
+  scores  <- as.data.frame(dapc_k$ind.coord)
+  grp_vec <- dapc_k$grp
+  eig_k   <- dapc_k$eig
+  pct_k   <- round(100 * eig_k / sum(eig_k), 1)
+  n_da_actual <- ncol(scores)
+
+  # DA axis labels with % variance
+  xlab_da <- paste0("DA 1 (", pct_k[1], "%)")
+  ylab_da <- if (n_da_actual >= 2) paste0("DA 2 (", pct_k[2], "%)")
+             else "DA 2 (0%)"
+
+  # Layout: scatter left (wider), eigenvalue barplot right (narrower)
+  theme_paper()
+  layout(matrix(c(1, 2), 1, 2), widths = c(3.8, 1.2))
+
+  # --- Panel 1: DA1 vs DA2 scatter ---
+  par(mar = c(4.5, 4.5, 3.5, 0.5))
+  x_range <- range(scores[,1])
+  y_range <- if (n_da_actual >= 2) range(scores[,2]) else c(-1, 1)
+  # Add 20% padding so points and ellipses don't touch borders
+  xpad <- diff(x_range) * 0.20
+  ypad <- diff(y_range) * 0.20
+  x_range <- c(x_range[1] - xpad, x_range[2] + xpad)
+  y_range <- c(y_range[1] - ypad, y_range[2] + ypad)
+
+  plot(NA, xlim = x_range, ylim = y_range,
+       xlab = xlab_da, ylab = ylab_da,
+       main = paste0("DAPC scatter  (K = ", k_val, ")"))
+  abline(h = 0, v = 0, col = "grey80", lty = 2, lwd = 0.8)
+
+  # 95% inertia ellipses per cluster (base R, no extra packages)
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    if (length(idx) < 3) next
+    pts <- cbind(scores[idx, 1],
+                 if (n_da_actual >= 2) scores[idx, 2] else rep(0, length(idx)))
+    cov_m  <- cov(pts)
+    centre <- colMeans(pts)
+    eig_e  <- eigen(cov_m)
+    theta  <- seq(0, 2*pi, length.out = 200)
+    chi2   <- sqrt(qchisq(0.95, df = 2))
+    ell    <- chi2 * eig_e$vectors %*%
+              diag(sqrt(eig_e$values)) %*%
+              rbind(cos(theta), sin(theta))
+    ell[1,] <- ell[1,] + centre[1]
+    ell[2,] <- ell[2,] + centre[2]
+    polygon(ell[1,], ell[2,],
+            col    = adjustcolor(pal_k[ci], alpha.f = 0.15),
+            border = pal_k[ci], lwd = 1.2, lty = 1)
+  }
+
+  # Points
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    points(scores[idx, 1],
+           if (n_da_actual >= 2) scores[idx, 2] else rep(0, length(idx)),
+           col = pal_k[ci], pch = pch_k[ci], cex = 1.1)
+  }
+
+  # Cluster centroids
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    cx  <- mean(scores[idx, 1])
+    cy  <- if (n_da_actual >= 2) mean(scores[idx, 2]) else 0
+    points(cx, cy, col = pal_k[ci], pch = pch_k[ci], cex = 2.2, lwd = 2)
+  }
+
+  # Legend — placed OUTSIDE plot area in bottom-left margin to avoid overlap
+  legend("bottomleft",
+         legend   = paste0("Cluster ", seq_len(k_val)),
+         col      = pal_k,
+         pch      = pch_k,
+         pt.cex   = 1.0,
+         cex      = 0.75,
+         bty      = "o",       # box around legend for readability
+         bg       = "white",   # opaque background
+         box.col  = "grey70",
+         y.intersp = 0.85,
+         x.intersp = 0.7)
+
+  # --- Panel 2: Eigenvalue barplot ---
+  par(mar = c(4.5, 3.5, 4.5, 1))   # extra top margin for DA1 label
+  bar_cols <- rep("grey75", length(eig_k))
+  bar_cols[1] <- pal_k[1]
+  if (length(bar_cols) >= 2) bar_cols[2] <- pal_k[2]
+
+  # Draw bars without x-axis labels (avoids R skipping even labels)
+  bp <- barplot(pct_k,
+                col       = bar_cols,
+                border    = "white",
+                horiz     = FALSE,
+                axes      = FALSE,
+                names.arg = rep("", length(pct_k)),  # blank; add manually below
+                ylim      = c(0, max(pct_k) * 1.15), # extra headroom for labels
+                main      = "DA eigenvalues",
+                ylab      = "")
+
+  # Add x-axis labels manually — guaranteed to show all (DA1, DA2 ... DAn)
+  axis(1, at = bp, labels = paste0("DA", seq_along(pct_k)),
+       tick = FALSE, cex.axis = 0.72, las = 1)
+
+  axis(2, las = 0, cex.axis = 0.75)
+  mtext("% variance", side = 2, line = 2.3, cex = 0.8, las = 0)
+
+  # Value labels inside the top headroom — only for bars >= 1%
+  for (bi in seq_along(pct_k)) {
+    if (pct_k[bi] >= 1) {
+      text(bp[bi], pct_k[bi] + max(pct_k) * 0.04,
+           labels = paste0(pct_k[bi], "%"),
+           cex = 0.65, col = "grey20", xpd = TRUE)
+    }
+  }
+
+  # Reset layout
+  layout(1)
+  scatter_plt <- recordPlot()
+
+  # Step E: compoplot (paper-grade)
+  pop_sz  <- as.vector(table(pop(genind_obj)[drop = FALSE]))
+  pop_nm  <- names(table(pop(genind_obj)[drop = FALSE]))
+  pop_cs  <- cumsum(pop_sz)
+  pop_mid <- pop_cs - pop_sz / 2
+
+  theme_paper()
+  par(mar = c(6, 4.5, 7, 1.5))
+  compoplot(dapc_k,
+            posi     = "bottomright",
+            txt.leg  = paste0("Cluster ", seq_len(k_val)),
+            lab      = "",
+            col      = pal_k,
+            xlab     = "",
+            space    = 0,
+            show.lab = FALSE,
+            border   = NA)          # no bar borders = cleaner look
+  title(xlab = "Individuals", ylab = "Membership probability", line = 3)
+  abline(v   = pop_cs[-length(pop_cs)] + 0.5,
+         col = "grey20", lty = 2, lwd = 1.2)
+  usr_k <- par("usr")
+  text(x      = pop_mid,
+       y      = usr_k[4] + (usr_k[4] - usr_k[3]) * 0.06,
+       labels = pop_nm,
+       srt    = 45, adj = c(0, 0), xpd = TRUE, cex = 0.8,
+       font   = 1)
+  compo_plt <- recordPlot()
+
+  # Step F: Q-scores table
+  qs <- as.data.frame(dapc_k$posterior)
+  colnames(qs) <- paste0("Cluster_", seq_len(ncol(qs)))
+  qs <- cbind(sample_name      = rownames(qs),
+              pop_name         = as.character(pop(genind_obj)),
+              assigned_cluster = as.character(grp_k$grp),
+              qs)
+
+  # Step G: eigenvalue table
+  eig_vals <- dapc_k$eig
+  eig_tab  <- data.frame(
+    DA          = seq_along(eig_vals),
+    Eigenvalue  = round(eig_vals, 4),
+    Percent_var = round(100 * eig_vals / sum(eig_vals), 2)
+  )
+
+  list(k       = k_val,
+       label   = label,
+       grp     = grp_k,
+       dapc    = dapc_k,
+       npca    = npca_k,
+       pal     = pal_k,
+       ascore  = ascore_plt,
+       scatter = scatter_plt,
+       compo   = compo_plt,
+       qscores = qs,
+       eigvals = eig_tab)
+}
+
+# ============================================================
+# Helper: save all outputs for one DAPC result
+# ============================================================
+save_dapc_outputs <- function(res, prefix) {
+  k  <- res$k
+
+  pdf(paste0(prefix, "_ascore.pdf"),   width = 6,  height = 5)
+  replayPlot(res$ascore);  dev.off()
+
+  pdf(paste0(prefix, "_scatter.pdf"),  width = 8,  height = 6)
+  replayPlot(res$scatter); dev.off()
+
+  pdf(paste0(prefix, "_compoplot.pdf"), width = 12, height = 5)
+  replayPlot(res$compo);   dev.off()
+
+  write.csv(res$qscores,
+            paste0(prefix, "_Qscores.csv"),
+            row.names = FALSE, quote = FALSE)
+  write.table(res$qscores,
+              paste0(prefix, "_Qscores.txt"),
+              sep = "\t", row.names = FALSE, quote = FALSE)
+  write.csv(res$eigvals,
+            paste0(prefix, "_eigenvalues.csv"),
+            row.names = FALSE, quote = FALSE)
+
+  cat("\nOutputs saved for K =", k, "(", res$label, "):\n")
+  cat("  ", basename(paste0(prefix, "_ascore.pdf")),    "\n")
+  cat("  ", basename(paste0(prefix, "_scatter.pdf")),   "\n")
+  cat("  ", basename(paste0(prefix, "_compoplot.pdf")), "\n")
+  cat("  ", basename(paste0(prefix, "_Qscores.csv")),   "\n")
+  cat("  ", basename(paste0(prefix, "_Qscores.txt")),   "\n")
+  cat("  ", basename(paste0(prefix, "_eigenvalues.csv")),"\n")
+}
+
+# ============================================================
+# --- 8-12. Primary K analysis ----
+# ============================================================
+res_primary <- run_dapc_for_k(gi, chosen_k, "primary")
+
+# Save BIC plot (shared)
+pdf(file.path(results_dir, "DAPC_BIC.pdf"), width = 6, height = 5)
+replayPlot(bic_plot); dev.off()
+
+# Save primary outputs
+save_dapc_outputs(res_primary,
+                  paste0(file.path(results_dir, "DAPC_K"), chosen_k))
+
+cat("\nShared outputs:\n")
+cat("  DAPC_BIC.pdf\n")
+cat("  BIC_table.csv\n")
+
+# ============================================================
+# --- 13. SENSITIVITY ANALYSIS — secondary K (optional) ----
+# ============================================================
+# HOW TO RUN WITHOUT REPEATING PRIMARY ANALYSIS:
+#   1. Run the full script once (primary completes, secondary skipped)
+#   2. To add secondary: source() only from this section onward:
+#        source(file.path(results_dir, "DAPC_secondary_only.R"))  # see file created below
+#   3. Or interactively: select lines from here to end and run
+#      res_primary must still exist in your R environment
+# ---------------------------------------------------------------
+run_secondary <- TRUE   # <-- set TRUE when ready; primary need not re-run
+
+# secondary_k auto-set to absolute BIC minimum (best_k)
+# Override: secondary_k <- 6
+secondary_k <- if (chosen_k != best_k) best_k else min(chosen_k + 2, max(k_vals))
+cat(sprintf("secondary_k auto-set to: %d  (chosen_k=%d elbow, best_k=%d abs.min BIC)\n",
+            secondary_k, chosen_k, best_k))
+cat("Override: secondary_k <- <value>  then re-run from here\n")
+
+if (run_secondary) {
+  res_secondary <- run_dapc_for_k(gi, secondary_k, "secondary")
+  save_dapc_outputs(res_secondary,
+                    paste0(file.path(results_dir, "DAPC_K"), secondary_k))
+} else {
+  cat("Secondary analysis skipped.\n")
+  cat("To run: set run_secondary <- TRUE and re-run from section 13 only.\n")
+  cat("  (res_primary, gi, chosen_k, best_k must exist in environment)\n")
+}
+
+# --- Write a standalone secondary-only script for convenience ---
+secondary_script <- c(
+  '# ============================================================',
+  '# DAPC_secondary_only.R',
+  '# Run secondary K analysis WITHOUT repeating primary.',
+  '# Prerequisites: run main script first (sections 0-12 complete),',
+  '#   then source() this file or paste into same R session.',
+  '# Objects needed: gi, chosen_k, best_k, k_vals, npca_fc,',
+  '#   run_dapc_for_k(), save_dapc_outputs(), theme_paper(),',
+  '#   cluster_cols() — all created by the main script.',
+  '# ============================================================',
+  '',
+  '# Set your desired secondary K here:',
+  'secondary_k <- if (chosen_k != best_k) best_k else min(chosen_k + 2, max(k_vals))',
+  'cat("Running secondary K =", secondary_k, "\\n")',
+  '',
+  'res_secondary <- run_dapc_for_k(gi, secondary_k, "secondary")',
+  'save_dapc_outputs(res_secondary, paste0(file.path(results_dir, "DAPC_K"), secondary_k))',
+  '',
+  '# Update summary to include secondary results:',
+  'cat("\\n  SECONDARY K =", secondary_k, "\\n")',
+  'cat(sprintf("    n.pca: %d  n.da: %d  a-score PCs: %d\\n",',
+  '            res_secondary$dapc$n.pca, res_secondary$dapc$n.da, res_secondary$npca))',
+  'cat("    Group sizes:\\n")',
+  'gs2 <- table(res_secondary$grp$grp)',
+  'for (g in names(gs2)) cat(sprintf("      Cluster %s: %d\\n", g, gs2[g]))',
+  'cat("    DA eigenvalues:\\n")',
+  'print(res_secondary$eigvals)'
+)
+writeLines(secondary_script, file.path(results_dir, "DAPC_secondary_only.R"))
+cat("Standalone secondary script written: DAPC_secondary_only.R\n")
+
+# ============================================================
+# FINAL SUMMARY
+# ============================================================
+cat("\n", strrep("=", 55), "\n", sep = "")
+cat("  DAPC ANALYSIS COMPLETE — RESULTS SUMMARY\n")
+cat(strrep("=", 55), "\n")
+cat(sprintf("  Dataset:       %d sequences, %d variable sites\n",
+            nInd(gi), nLoc(gi)))
+cat(sprintf("  n.pca (data-driven, 95%% PCA variance): %d\n", npca_95))
+cat(sprintf("  BIC replicates: %d (n.pca=%d, n.start=5, n.iter=1e4)\n",
+            n_reps, npca_bic))
+cat(sprintf("  find.clusters final: n.pca=%d, n.start=100, n.iter=1e5\n",
+            npca_fc))
+cat(sprintf("  K (lowest BIC): %d  |  K (elbow): %d\n",
+            best_k, elbow_k_auto))
+cat("\n  PRIMARY K =", chosen_k, "\n")
+cat(sprintf("    n.pca: %d  |  n.da: %d  |  a-score optimal PCs: %d\n",
+            res_primary$dapc$n.pca,
+            res_primary$dapc$n.da,
+            res_primary$npca))
+cat("    Group sizes:\n")
+gs <- table(res_primary$grp$grp)
+for (g in names(gs)) cat(sprintf("      Cluster %s: %d individuals\n", g, gs[g]))
+cat("    DA eigenvalues:\n")
+print(res_primary$eigvals)
+
+if (run_secondary) {
+  cat("\n  SECONDARY K =", secondary_k, "\n")
+  cat(sprintf("    n.pca: %d  |  n.da: %d  |  a-score optimal PCs: %d\n",
+              res_secondary$dapc$n.pca,
+              res_secondary$dapc$n.da,
+              res_secondary$npca))
+  cat("    Group sizes:\n")
+  gs2 <- table(res_secondary$grp$grp)
+  for (g in names(gs2)) cat(sprintf("      Cluster %s: %d individuals\n", g, gs2[g]))
+  cat("    DA eigenvalues:\n")
+  print(res_secondary$eigvals)
+}
+
+cat("\n  Files in results/:\n")
+ff <- sort(list.files(results_dir))
+for (f in ff) cat("    ", f, "\n")
+cat(strrep("=", 55), "\n")
+```
+
+##DAPC v2
+
+```{r}
+# ============================================================
+# --- 6b. Data-driven n.pca selection ----
+# Runs PCA once to find how many PCs explain 95% of variance.
+# npca_95 replaces arbitrary n.pca=50 everywhere in the script.
+# ============================================================
+library(ade4)
+cat("Computing data-driven n.pca (PCs explaining 95% variance)...\n")
+pca_test <- dudi.pca(tab(gi, NA.method = "mean"),
+                     scannf = FALSE,
+                     nf     = min(nInd(gi) - 1, nLoc(gi)))
+cum_var  <- cumsum(pca_test$eig) / sum(pca_test$eig)
+npca_95  <- which(cum_var >= 0.95)[1]
+npca_bic <- npca_95   # used in BIC replicates
+npca_fc  <- npca_95   # used in find.clusters final run
+cat(sprintf("  Total PCs available:         %d\n", length(pca_test$eig)))
+cat(sprintf("  PCs explaining 95%% variance: %d  (npca_95)\n", npca_95))
+cat(sprintf("  --> Using n.pca = %d for all find.clusters() calls\n\n", npca_95))
+
+
+# ============================================================
+# --- 7. Replicated BIC — find optimal K (n=1000) ----
+# ============================================================
+set.seed(42)
+n_reps   <- 1000
+bic_list <- vector("list", n_reps)
+# Parameter rationale — BIC loop vs Step A:
+#
+#  BIC loop:  n_reps=1000, n.start=500, n.iter=1e6
+#    Work: 1000 x 500 x 1e6 ops  (~10 min observed on this dataset)
+#    1000 reps gives maximum BIC curve stability and tight SE bars.
+#    n.start=500 and n.iter=1e6 give reliable BIC per replicate.
+#    Further reps add negligible precision beyond n=1000.
+#
+#  Step A (run_dapc_for_k): 10 runs, n.start=500, n.iter=1e6
+#    Purpose: maximum-precision definitive cluster assignment.
+#    10 independent runs with stability check ensures global optimum.
+#    This is the publication-quality result.
+cat("Running", n_reps, "replicate BIC runs — please wait...\n")
+for (i in seq_len(n_reps)) {
+  fc <- find.clusters(gi, max.n.clust = 10, n.pca = npca_bic,
+                      n.iter = 1e6, n.start = 500,   # see rationale above
+                      choose.n.clust = FALSE)
+  bic_list[[i]] <- fc$Kstat
+  if (i %% 10 == 0) cat("  completed", i, "/", n_reps, "\n")
+}
+bic_reps <- do.call(cbind, bic_list)
+bic_mean <- apply(bic_reps, 1, mean)
+bic_sd   <- apply(bic_reps, 1, sd)
+bic_se   <- bic_sd / sqrt(n_reps)
+k_vals   <- 1:10
+
+# Paper-grade BIC plot
+theme_paper()
+par(mar = c(4.5, 4.5, 3.5, 1.5))
+plot(k_vals, bic_mean,
+     type = "b", pch = 19, col = "#2166AC", lwd = 1.5,
+     xlab = "Number of clusters (K)",
+     ylab = "BIC (mean \u00b1 SE)",
+     main = paste0("BIC vs. number of clusters\n(", n_reps, " replicates)"),
+     xlim = c(1, 10), xaxt = "n")
+axis(1, at = k_vals)
+arrows(k_vals, bic_mean - bic_se, k_vals, bic_mean + bic_se,
+       angle = 90, code = 3, length = 0.04, col = "#4D4D4D", lwd = 1)
+bic_plot <- recordPlot()
+
+# K selection diagnostics
+best_k       <- k_vals[which.min(bic_mean)]
+bic_diff2    <- diff(diff(bic_mean))
+elbow_k_auto <- which.max(abs(bic_diff2)) + 1
+
+bic_table <- data.frame(
+  K         = k_vals,
+  BIC_mean  = round(bic_mean, 2),
+  BIC_SD    = round(bic_sd,   2),
+  BIC_SE    = round(bic_se,   3),
+  delta_BIC = c(NA, round(diff(bic_mean), 2))
+)
+
+cat("\n=== K selection summary ===\n")
+cat(sprintf("%-44s %d\n", "K with lowest BIC (which.min):", best_k))
+cat(sprintf("%-44s %d\n", "K at largest curvature (auto elbow):", elbow_k_auto))
+cat("\nBIC table:\n")
+cat(sprintf("%-4s  %8s  %7s  %6s  %10s\n",
+            "K","BIC_mean","BIC_SD","BIC_SE","delta_BIC"))
+cat(strrep("-", 46), "\n")
+for (i in seq_len(nrow(bic_table))) {
+  cat(sprintf("%-4d  %8.2f  %7.2f  %6.3f  %s\n",
+              bic_table$K[i], bic_table$BIC_mean[i],
+              bic_table$BIC_SD[i], bic_table$BIC_SE[i],
+              ifelse(is.na(bic_table$delta_BIC[i]), "        NA",
+                     sprintf("%10.2f", bic_table$delta_BIC[i]))))
+}
+cat(strrep("-", 46), "\n")
+cat("delta_BIC: largest negative drop marks the elbow\n")
+cat("===========================\n\n")
+
+write.csv(bic_table, file.path(results_dir, "BIC_table.csv"), row.names = FALSE, quote = FALSE)
+
+
+# SET chosen_k — elbow detection:
+# The elbow is where delta_BIC STOPS being large, not where it IS largest.
+# Method: find K where the drop ratio drops below 20% of the maximum drop.
+bic_drops   <- abs(diff(bic_mean))             # absolute drops per K step
+drop_thresh <- max(bic_drops) * 0.20            # 20% of largest drop
+# Elbow = first K where the drop AFTER it falls below threshold
+elbow_pos   <- which(bic_drops < drop_thresh)[1]  # first 'small' drop position
+chosen_k    <- k_vals[elbow_pos]                  # K just before drops go small
+
+cat("\n=== Elbow detection ===\n")
+cat("Absolute BIC drops per K step:\n")
+for (ki in seq_along(bic_drops))
+  cat(sprintf("  K%d->K%d: %.2f%s\n", ki, ki+1, bic_drops[ki],
+              if (ki+1 == chosen_k) "  <- ELBOW" else ""))
+cat(sprintf("Drop threshold (20%% of max): %.2f\n", drop_thresh))
+cat(sprintf("Auto-detected elbow: K = %d\n", chosen_k))
+cat("Override manually if needed: chosen_k <- <value>\n")
+cat("=======================\n\n")
+
+
+# ============================================================
+# CROSS-VALIDATION TOGGLE
+# use_xval_npca controls which n.pca drives the FINAL DAPC:
+#   FALSE = a-score value drives the final DAPC (default; reproduces prior
+#           results). xvalDapc is still run and REPORTED as a cross-check.
+#   TRUE  = the cross-validated lowest-RMSE n.pca drives the final DAPC.
+# ============================================================
+use_xval_npca <- FALSE
+
+
+# ============================================================
+# Helper: run full DAPC pipeline for a given K
+# Returns list with all objects and plots needed
+# ============================================================
+run_dapc_for_k <- function(genind_obj, k_val, label, use_xval_npca = FALSE) {
+
+  cat(strrep("=", 50), "\n")
+  cat("  Running DAPC for K =", k_val, "(", label, ")\n")
+  cat(strrep("=", 50), "\n")
+
+  # Step A: find clusters — MAXIMUM PRECISION
+  # n.pca   = npca_fc  (data-driven, 95% PCA variance from section 6b)
+  # n.start = 500      (exhaustive search for global k-means optimum)
+  # n.iter  = 1e6      (full convergence, no iteration limit reached)
+  # 10 independent runs with stability check — publication quality
+  set.seed(42)
+  grp_runs <- lapply(1:10, function(s) {
+    find.clusters(genind_obj,
+                  n.clust        = k_val,
+                  n.pca          = npca_fc,
+                  n.iter         = 1e6,
+                  n.start        = 500,
+                  choose.n.clust = FALSE)
+  })
+  gs_list <- lapply(grp_runs, function(r) sort(as.vector(table(r$grp))))
+  stable  <- all(sapply(gs_list, identical, gs_list[[1]]))
+  if (stable) {
+    cat("  Stability check: PASSED (10/10 runs identical group sizes)\n")
+  } else {
+    cat("  Stability check: WARNING — group sizes differ across 10 runs\n")
+    cat("  Unexpected with n.start=500; check data quality\n")
+    for (s in seq_along(gs_list))
+      cat(sprintf("    Run %d: %s\n", s, paste(gs_list[[s]], collapse = " ")))
+  }
+  grp_k <- grp_runs[[1]]   # use first run (all equivalent if stable)
+  cat("Group sizes:\n"); print(table(grp_k$grp))
+
+  # Step B: a-score optimisation
+  # n.pca ceiling = npca_fc (data-driven) not fixed 30
+  n_da_k   <- k_val - 1
+  dapc_tmp <- dapc(genind_obj, grp_k$grp,
+                   n.pca = npca_fc,
+                   n.da  = n_da_k)
+  theme_paper()
+  par(mar = c(4.5, 4.5, 4, 1.5))
+  a_opt_k    <- optim.a.score(dapc_tmp)
+  ascore_plt <- recordPlot()
+  npca_k     <- a_opt_k$best
+  cat("Optimal n.pca (a-score):", npca_k, "\n")
+
+  # ------------------------------------------------------------
+  # Step B2: cross-validation of n.pca (xvalDapc) — CROSS-CHECK
+  # More rigorous than the a-score. Reports the n.pca that minimises
+  # cross-validated assignment error (lowest RMSE) and the n.pca that
+  # maximises mean successful assignment. result = "groupMean" is used
+  # because cluster sizes are unequal. Wrapped in tryCatch so a failure
+  # (e.g. a very small cluster at high K) never kills the run.
+  # ------------------------------------------------------------
+  set.seed(42)
+  x_mat        <- tab(genind_obj, NA.method = "mean")
+  npca_ceiling <- min(npca_fc, nInd(genind_obj) - 1)
+  theme_paper()
+  par(mar = c(4.5, 4.5, 4, 1.5))
+  xval <- tryCatch(
+    xvalDapc(x_mat, grp_k$grp,
+             n.pca.max    = npca_ceiling,
+             training.set = 0.9,
+             result       = "groupMean",
+             n.rep        = 100,
+             xval.plot    = TRUE),
+    error = function(e) {
+      cat("  xvalDapc failed:", conditionMessage(e), "\n"); NULL
+    })
+
+  if (!is.null(xval)) {
+    xval_plt       <- recordPlot()
+    npca_xval_mse  <- as.integer(as.character(
+                        xval[["Number of PCs Achieving Lowest MSE"]]))
+    npca_xval_succ <- as.integer(as.character(
+                        xval[["Number of PCs Achieving Highest Mean Success"]]))
+    cat(sprintf("  xvalDapc: lowest-RMSE n.pca = %d | highest-success n.pca = %d\n",
+                npca_xval_mse, npca_xval_succ))
+  } else {
+    xval_plt       <- NULL
+    npca_xval_mse  <- NA_integer_
+    npca_xval_succ <- NA_integer_
+  }
+
+  # Step C: final DAPC — n.pca from a-score (default) or xval (toggle)
+  use_xv     <- isTRUE(use_xval_npca) && !is.na(npca_xval_mse)
+  npca_final <- if (use_xv) npca_xval_mse else npca_k
+  if (isTRUE(use_xval_npca) && is.na(npca_xval_mse))
+    cat("  (xval unavailable — falling back to a-score n.pca for final DAPC)\n")
+  cat(sprintf("  Final DAPC uses n.pca = %d  (source: %s)\n",
+              npca_final, if (use_xv) "xval lowest-RMSE" else "a-score"))
+
+  dapc_k <- dapc(genind_obj, grp_k$grp, n.pca = npca_final, n.da = n_da_k)
+  cat("DAPC K =", k_val, "| n.pca:", dapc_k$n.pca,
+      "| n.da:", dapc_k$n.da, "\n")
+
+  # Step D: custom scatter — DA1 vs DA2 with ellipses + eigenvalue barplot
+  pal_k  <- cluster_cols(k_val)
+  pch_k  <- c(15,16,17,18,8,11,12,13)[seq_len(k_val)]
+
+  # Extract DA scores and group assignments
+  scores  <- as.data.frame(dapc_k$ind.coord)
+  grp_vec <- dapc_k$grp
+  eig_k   <- dapc_k$eig
+  pct_k   <- round(100 * eig_k / sum(eig_k), 1)
+  n_da_actual <- ncol(scores)
+
+  # DA axis labels with % variance
+  xlab_da <- paste0("DA 1 (", pct_k[1], "%)")
+  ylab_da <- if (n_da_actual >= 2) paste0("DA 2 (", pct_k[2], "%)")
+             else "DA 2 (0%)"
+
+  # Layout: scatter left (wider), eigenvalue barplot right (narrower)
+  theme_paper()
+  layout(matrix(c(1, 2), 1, 2), widths = c(3.8, 1.2))
+
+  # --- Panel 1: DA1 vs DA2 scatter ---
+  par(mar = c(4.5, 4.5, 3.5, 0.5))
+  x_range <- range(scores[,1])
+  y_range <- if (n_da_actual >= 2) range(scores[,2]) else c(-1, 1)
+  # Add 20% padding so points and ellipses don't touch borders
+  xpad <- diff(x_range) * 0.20
+  ypad <- diff(y_range) * 0.20
+  x_range <- c(x_range[1] - xpad, x_range[2] + xpad)
+  y_range <- c(y_range[1] - ypad, y_range[2] + ypad)
+
+  plot(NA, xlim = x_range, ylim = y_range,
+       xlab = xlab_da, ylab = ylab_da,
+       main = paste0("DAPC scatter  (K = ", k_val, ")"))
+  abline(h = 0, v = 0, col = "grey80", lty = 2, lwd = 0.8)
+
+  # 95% inertia ellipses per cluster (base R, no extra packages)
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    if (length(idx) < 3) next
+    pts <- cbind(scores[idx, 1],
+                 if (n_da_actual >= 2) scores[idx, 2] else rep(0, length(idx)))
+    cov_m  <- cov(pts)
+    centre <- colMeans(pts)
+    eig_e  <- eigen(cov_m)
+    theta  <- seq(0, 2*pi, length.out = 200)
+    chi2   <- sqrt(qchisq(0.95, df = 2))
+    ell    <- chi2 * eig_e$vectors %*%
+              diag(sqrt(eig_e$values)) %*%
+              rbind(cos(theta), sin(theta))
+    ell[1,] <- ell[1,] + centre[1]
+    ell[2,] <- ell[2,] + centre[2]
+    polygon(ell[1,], ell[2,],
+            col    = adjustcolor(pal_k[ci], alpha.f = 0.15),
+            border = pal_k[ci], lwd = 1.2, lty = 1)
+  }
+
+  # Points
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    points(scores[idx, 1],
+           if (n_da_actual >= 2) scores[idx, 2] else rep(0, length(idx)),
+           col = pal_k[ci], pch = pch_k[ci], cex = 1.1)
+  }
+
+  # Cluster centroids
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    cx  <- mean(scores[idx, 1])
+    cy  <- if (n_da_actual >= 2) mean(scores[idx, 2]) else 0
+    points(cx, cy, col = pal_k[ci], pch = pch_k[ci], cex = 2.2, lwd = 2)
+  }
+
+  # Legend — placed OUTSIDE plot area in bottom-left margin to avoid overlap
+  legend("bottomleft",
+         legend   = paste0("Cluster ", seq_len(k_val)),
+         col      = pal_k,
+         pch      = pch_k,
+         pt.cex   = 1.0,
+         cex      = 0.75,
+         bty      = "o",       # box around legend for readability
+         bg       = "white",   # opaque background
+         box.col  = "grey70",
+         y.intersp = 0.85,
+         x.intersp = 0.7)
+
+  # --- Panel 2: Eigenvalue barplot ---
+  par(mar = c(4.5, 3.5, 4.5, 1))   # extra top margin for DA1 label
+  bar_cols <- rep("grey75", length(eig_k))
+  bar_cols[1] <- pal_k[1]
+  if (length(bar_cols) >= 2) bar_cols[2] <- pal_k[2]
+
+  # Draw bars without x-axis labels (avoids R skipping even labels)
+  bp <- barplot(pct_k,
+                col       = bar_cols,
+                border    = "white",
+                horiz     = FALSE,
+                axes      = FALSE,
+                names.arg = rep("", length(pct_k)),  # blank; add manually below
+                ylim      = c(0, max(pct_k) * 1.15), # extra headroom for labels
+                main      = "DA eigenvalues",
+                ylab      = "")
+
+  # Add x-axis labels via mtext — never thinned by axis() overlap-suppression.
+  # (axis() silently drops labels that would collide, which previously hid DA2
+  #  when there were 3+ narrow bars; mtext places every label unconditionally.)
+  mtext(paste0("DA", seq_along(pct_k)), side = 1, at = bp,
+        line = 0.4, cex = 0.72, las = 1)
+
+  axis(2, las = 0, cex.axis = 0.75)
+  mtext("% variance", side = 2, line = 2.3, cex = 0.8, las = 0)
+
+  # Value labels inside the top headroom — only for bars >= 1%
+  for (bi in seq_along(pct_k)) {
+    if (pct_k[bi] >= 1) {
+      text(bp[bi], pct_k[bi] + max(pct_k) * 0.04,
+           labels = paste0(pct_k[bi], "%"),
+           cex = 0.65, col = "grey20", xpd = TRUE)
+    }
+  }
+
+  # Reset layout
+  layout(1)
+  scatter_plt <- recordPlot()
+
+  # Step E: compoplot (paper-grade)
+  pop_sz  <- as.vector(table(pop(genind_obj)[drop = FALSE]))
+  pop_nm  <- names(table(pop(genind_obj)[drop = FALSE]))
+  pop_cs  <- cumsum(pop_sz)
+  pop_mid <- pop_cs - pop_sz / 2
+
+  theme_paper()
+  par(mar = c(6, 4.5, 7, 1.5))
+  compoplot(dapc_k,
+            posi     = "bottomright",
+            txt.leg  = paste0("Cluster ", seq_len(k_val)),
+            lab      = "",
+            col      = pal_k,
+            xlab     = "",
+            space    = 0,
+            show.lab = FALSE,
+            border   = NA)          # no bar borders = cleaner look
+  title(xlab = "Individuals", ylab = "Membership probability", line = 3)
+  abline(v   = pop_cs[-length(pop_cs)] + 0.5,
+         col = "grey20", lty = 2, lwd = 1.2)
+  usr_k <- par("usr")
+  text(x      = pop_mid,
+       y      = usr_k[4] + (usr_k[4] - usr_k[3]) * 0.06,
+       labels = pop_nm,
+       srt    = 45, adj = c(0, 0), xpd = TRUE, cex = 0.8,
+       font   = 1)
+  compo_plt <- recordPlot()
+
+  # Step F: Q-scores table
+  qs <- as.data.frame(dapc_k$posterior)
+  colnames(qs) <- paste0("Cluster_", seq_len(ncol(qs)))
+  qs <- cbind(sample_name      = rownames(qs),
+              pop_name         = as.character(pop(genind_obj)),
+              assigned_cluster = as.character(grp_k$grp),
+              qs)
+
+  # Step G: eigenvalue table
+  eig_vals <- dapc_k$eig
+  eig_tab  <- data.frame(
+    DA          = seq_along(eig_vals),
+    Eigenvalue  = round(eig_vals, 4),
+    Percent_var = round(100 * eig_vals / sum(eig_vals), 2)
+  )
+
+  list(k         = k_val,
+       label     = label,
+       grp       = grp_k,
+       dapc      = dapc_k,
+       npca      = npca_k,          # a-score optimum
+       npca_xval = npca_xval_mse,   # xval lowest-RMSE optimum (NA if failed)
+       npca_used = npca_final,      # what the final DAPC actually used
+       pal       = pal_k,
+       ascore    = ascore_plt,
+       xval      = xval_plt,        # NULL if xval failed
+       scatter   = scatter_plt,
+       compo     = compo_plt,
+       qscores   = qs,
+       eigvals   = eig_tab)
+}
+
+# ============================================================
+# Helper: save all outputs for one DAPC result
+# ============================================================
+save_dapc_outputs <- function(res, prefix) {
+  k  <- res$k
+
+  pdf(paste0(prefix, "_ascore.pdf"),   width = 6,  height = 5)
+  replayPlot(res$ascore);  dev.off()
+
+  if (!is.null(res$xval)) {
+    pdf(paste0(prefix, "_xval.pdf"),   width = 6,  height = 5)
+    replayPlot(res$xval);  dev.off()
+  }
+
+  pdf(paste0(prefix, "_scatter.pdf"),  width = 8,  height = 6)
+  replayPlot(res$scatter); dev.off()
+
+  pdf(paste0(prefix, "_compoplot.pdf"), width = 12, height = 5)
+  replayPlot(res$compo);   dev.off()
+
+  write.csv(res$qscores,
+            paste0(prefix, "_Qscores.csv"),
+            row.names = FALSE, quote = FALSE)
+  write.table(res$qscores,
+              paste0(prefix, "_Qscores.txt"),
+              sep = "\t", row.names = FALSE, quote = FALSE)
+  write.csv(res$eigvals,
+            paste0(prefix, "_eigenvalues.csv"),
+            row.names = FALSE, quote = FALSE)
+
+  cat("\nOutputs saved for K =", k, "(", res$label, "):\n")
+  cat("  ", basename(paste0(prefix, "_ascore.pdf")),    "\n")
+  if (!is.null(res$xval))
+    cat("  ", basename(paste0(prefix, "_xval.pdf")),    "\n")
+  cat("  ", basename(paste0(prefix, "_scatter.pdf")),   "\n")
+  cat("  ", basename(paste0(prefix, "_compoplot.pdf")), "\n")
+  cat("  ", basename(paste0(prefix, "_Qscores.csv")),   "\n")
+  cat("  ", basename(paste0(prefix, "_Qscores.txt")),   "\n")
+  cat("  ", basename(paste0(prefix, "_eigenvalues.csv")),"\n")
+}
+
+# ============================================================
+# --- 8-12. Primary K analysis ----
+# ============================================================
+res_primary <- run_dapc_for_k(gi, chosen_k, "primary", use_xval_npca)
+
+# Save BIC plot (shared)
+pdf(file.path(results_dir, "DAPC_BIC.pdf"), width = 6, height = 5)
+replayPlot(bic_plot); dev.off()
+
+# Save primary outputs
+save_dapc_outputs(res_primary,
+                  paste0(file.path(results_dir, "DAPC_K"), chosen_k))
+
+cat("\nShared outputs:\n")
+cat("  DAPC_BIC.pdf\n")
+cat("  BIC_table.csv\n")
+
+# ============================================================
+# --- 13. SENSITIVITY ANALYSIS — secondary K (optional) ----
+# ============================================================
+run_secondary <- TRUE   # <-- set TRUE when ready; primary need not re-run
+
+# secondary_k auto-set to absolute BIC minimum (best_k)
+# Override: secondary_k <- 6
+secondary_k <- if (chosen_k != best_k) best_k else min(chosen_k + 2, max(k_vals))
+cat(sprintf("secondary_k auto-set to: %d  (chosen_k=%d elbow, best_k=%d abs.min BIC)\n",
+            secondary_k, chosen_k, best_k))
+cat("Override: secondary_k <- <value>  then re-run from here\n")
+
+if (run_secondary) {
+  res_secondary <- run_dapc_for_k(gi, secondary_k, "secondary", use_xval_npca)
+  save_dapc_outputs(res_secondary,
+                    paste0(file.path(results_dir, "DAPC_K"), secondary_k))
+} else {
+  cat("Secondary analysis skipped.\n")
+  cat("To run: set run_secondary <- TRUE and re-run from section 13 only.\n")
+  cat("  (res_primary, gi, chosen_k, best_k must exist in environment)\n")
+}
+
+# --- Write a standalone secondary-only script for convenience ---
+secondary_script <- c(
+  '# ============================================================',
+  '# DAPC_secondary_only.R',
+  '# Run secondary K analysis WITHOUT repeating primary.',
+  '# Prerequisites: run main script first (sections 0-12 complete),',
+  '#   then source() this file or paste into same R session.',
+  '# Objects needed: gi, chosen_k, best_k, k_vals, npca_fc, use_xval_npca,',
+  '#   run_dapc_for_k(), save_dapc_outputs(), theme_paper(),',
+  '#   cluster_cols() — all created by the main script.',
+  '# ============================================================',
+  '',
+  '# Set your desired secondary K here:',
+  'secondary_k <- if (chosen_k != best_k) best_k else min(chosen_k + 2, max(k_vals))',
+  'cat("Running secondary K =", secondary_k, "\\n")',
+  '',
+  'res_secondary <- run_dapc_for_k(gi, secondary_k, "secondary", use_xval_npca)',
+  'save_dapc_outputs(res_secondary, paste0(file.path(results_dir, "DAPC_K"), secondary_k))',
+  '',
+  '# Update summary to include secondary results:',
+  'cat("\\n  SECONDARY K =", secondary_k, "\\n")',
+  'cat(sprintf("    n.pca: %d  n.da: %d  a-score PCs: %d  xval PCs: %s\\n",',
+  '            res_secondary$dapc$n.pca, res_secondary$dapc$n.da,',
+  '            res_secondary$npca, as.character(res_secondary$npca_xval)))',
+  'cat("    Group sizes:\\n")',
+  'gs2 <- table(res_secondary$grp$grp)',
+  'for (g in names(gs2)) cat(sprintf("      Cluster %s: %d\\n", g, gs2[g]))',
+  'cat("    DA eigenvalues:\\n")',
+  'print(res_secondary$eigvals)'
+)
+writeLines(secondary_script, file.path(results_dir, "DAPC_secondary_only.R"))
+cat("Standalone secondary script written: DAPC_secondary_only.R\n")
+
+# ============================================================
+# FINAL SUMMARY
+# ============================================================
+cat("\n", strrep("=", 55), "\n", sep = "")
+cat("  DAPC ANALYSIS COMPLETE — RESULTS SUMMARY\n")
+cat(strrep("=", 55), "\n")
+cat(sprintf("  Dataset:       %d individuals, %d loci\n",
+            nInd(gi), nLoc(gi)))
+cat(sprintf("  n.pca (data-driven, 95%% PCA variance): %d\n", npca_95))
+cat(sprintf("  BIC replicates: %d (n.pca=%d, n.start=500, n.iter=1e6)\n",
+            n_reps, npca_bic))
+cat(sprintf("  find.clusters final: n.pca=%d, n.start=500, n.iter=1e6\n",
+            npca_fc))
+cat(sprintf("  Final n.pca source: %s\n",
+            if (isTRUE(use_xval_npca)) "xvalDapc (lowest RMSE)" else "a-score"))
+cat(sprintf("  K (lowest BIC): %d  |  K (elbow): %d\n",
+            best_k, elbow_k_auto))
+cat("\n  PRIMARY K =", chosen_k, "\n")
+cat(sprintf("    n.pca: %d  |  n.da: %d  |  a-score PCs: %d  |  xval PCs: %s\n",
+            res_primary$dapc$n.pca,
+            res_primary$dapc$n.da,
+            res_primary$npca,
+            as.character(res_primary$npca_xval)))
+cat("    Group sizes:\n")
+gs <- table(res_primary$grp$grp)
+for (g in names(gs)) cat(sprintf("      Cluster %s: %d individuals\n", g, gs[g]))
+cat("    DA eigenvalues:\n")
+print(res_primary$eigvals)
+
+if (run_secondary) {
+  cat("\n  SECONDARY K =", secondary_k, "\n")
+  cat(sprintf("    n.pca: %d  |  n.da: %d  |  a-score PCs: %d  |  xval PCs: %s\n",
+              res_secondary$dapc$n.pca,
+              res_secondary$dapc$n.da,
+              res_secondary$npca,
+              as.character(res_secondary$npca_xval)))
+  cat("    Group sizes:\n")
+  gs2 <- table(res_secondary$grp$grp)
+  for (g in names(gs2)) cat(sprintf("      Cluster %s: %d individuals\n", g, gs2[g]))
+  cat("    DA eigenvalues:\n")
+  print(res_secondary$eigvals)
+}
+
+cat("\n  Files in results/:\n")
+ff <- sort(list.files(results_dir))
+for (f in ff) cat("    ", f, "\n")
+cat(strrep("=", 55), "\n")
+```
+
+##xvalDapc
+
+```{r}
+# Reproduce both xvalDapc optima on the stored k-means groups (same seed/params)
+xval_optima <- function(genind_obj, grp, n_pca_max, seed = 42, n_rep = 100) {
+  set.seed(seed)
+  x  <- tab(genind_obj, NA.method = "mean")
+  xv <- xvalDapc(x, grp,
+                 n.pca.max    = min(n_pca_max, nInd(genind_obj) - 1),
+                 training.set = 0.9, result = "groupMean",
+                 n.rep = n_rep, xval.plot = FALSE)
+  mse  <- as.integer(as.character(xv[["Number of PCs Achieving Lowest MSE"]]))
+  succ <- as.integer(as.character(xv[["Number of PCs Achieving Highest Mean Success"]]))
+  cat(sprintf("xvalDapc: lowest-RMSE n.pca = %d | highest-success n.pca = %d\n",
+              mse, succ))
+  invisible(c(lowest_RMSE = mse, highest_success = succ))
+}
+
+xval_optima(gi, res_primary$grp$grp,   npca_fc)   # K = 3
+xval_optima(gi, res_secondary$grp$grp, npca_fc)   # K = 4
+
+# Sensitivity of cluster assignment to n.pca: a-score vs xval
+sens_npca <- function(genind_obj, grp, npca_a, npca_x, k_val) {
+  n_da <- k_val - 1
+  da <- dapc(genind_obj, grp, n.pca = npca_a, n.da = n_da)  # a-score
+  dx <- dapc(genind_obj, grp, n.pca = npca_x, n.da = n_da)  # xval
+  chg <- which(da$assign != dx$assign)
+  cat(sprintf("K=%d: a-score n.pca=%d vs xval n.pca=%d — %d/%d differ (%.1f%%)\n",
+              k_val, npca_a, npca_x, length(chg), nInd(genind_obj),
+              100 * length(chg) / nInd(genind_obj)))
+  for (i in chg)
+    cat(sprintf("    %-28s  a-score->Cl%s  xval->Cl%s\n",
+                indNames(genind_obj)[i], da$assign[i], dx$assign[i]))
+  invisible(chg)
+}
+sens_npca(gi, res_primary$grp$grp,   res_primary$npca,   res_primary$npca_xval,   3)
+sens_npca(gi, res_secondary$grp$grp, res_secondary$npca, res_secondary$npca_xval, 4)
+```
+
+#DAPC_Prep_v2
+
+```{r}
+# ============================================================
+#  DAPC v1 — front-end for sweet cherry SSR + S-locus data
+#  Drop-in replacement for EABUA_DAPC sections 1–6 (the FASTA loader).
+#  Produces: gi (diploid codominant genind), pop(gi), results_dir
+#  Hands off UNCHANGED to v14 sub+ section "6b. Data-driven n.pca" onward.
+#
+#  Input: UKR_Sw_Cherry_ID__18_SSR___3__S-locus__data.txt
+#    94 accessions × 21 loci (18 SSR + 3 S-locus), two allele columns/locus,
+#    tab-separated, missing coded '*', diploid allele sizes in bp.
+# ============================================================
+
+# --- 0. Packages ----
+library(adegenet)
+library(ade4)        # used downstream by section 6b
+
+# --- 1. Config ----
+setwd("C:/R/UA_Cherry_ID/")           # set to your project root if needed
+geno_path <- "C:/R/UA_Cherry_ID/data/UKR_Sw_Cherry_ID_18_SSR_3_S-locus_data.txt"
+
+# Marker set:
+#   "SSR"   = 18 neutral microsatellites only   (PRIMARY analysis; default)
+#   "SSR_S" = all 21 loci incl. 3 S-locus markers (SENSITIVITY run only)
+# PaConsI / PaConsII / F-box all tag the self-incompatibility S-locus:
+# non-neutral (balancing selection) and mutually linked. Including them
+# violates DAPC's neutral/independent-locus assumption and over-weights a
+# single genomic region — keep them OUT of the primary run.
+marker_set <- "SSR"
+
+# Clone handling:
+#   Identity work shows only a FEW accessions are true duplicates, so we do
+#   NOT auto-collapse. The script only REPORTS exact-genotype matches for
+#   your review. Set TRUE only if you decide to keep one per match group.
+clone_correct <- FALSE
+
+# --- 2. Read genotype table ----
+raw <- read.delim(geno_path, header = TRUE, sep = "\t",
+                  na.strings   = c("*", "", "NA"),
+                  check.names  = FALSE,
+                  colClasses   = "character",   # keep allele sizes as codes
+                  stringsAsFactors = FALSE)
+
+id_col <- names(raw)[1]                                   # "Sample Name"
+raw    <- raw[!is.na(raw[[id_col]]) & raw[[id_col]] != "", ]   # drop blank rows
+ids    <- trimws(raw[[id_col]])
+if (anyDuplicated(ids))
+  stop("Duplicate sample IDs: ", paste(ids[duplicated(ids)], collapse = ", "))
+rownames(raw) <- ids
+cat(sprintf("Read %d accessions, %d allele columns.\n",
+            nrow(raw), length(names(raw)) - 1))
+
+# --- 3. Identify loci from the "<locus> 1" / "<locus> 2" column pairs ----
+allele_cols  <- setdiff(names(raw), id_col)
+locus_of_col <- sub("\\s+\\d+$", "", allele_cols)   # strip trailing " 1"/" 2"
+loci_all     <- unique(locus_of_col)                # 21 loci, in file order
+
+s_markers <- c("PaConsI", "PaConsII", "F-box")
+ssr_loci  <- setdiff(loci_all, s_markers)           # 18 SSRs
+
+loci_keep <- switch(marker_set,
+  "SSR"   = ssr_loci,
+  "SSR_S" = loci_all,
+  stop("marker_set must be 'SSR' or 'SSR_S'"))
+
+cat(sprintf("\nMarker set '%s': %d loci\n", marker_set, length(loci_keep)))
+cat("  ", paste(loci_keep, collapse = ", "), "\n", sep = "")
+
+# --- 4. Combine each locus's two allele columns into 'a1/a2' genotypes ----
+# Missing ('*') is always paired in this file (both alleles '*'), so a locus
+# is either fully typed or fully missing -> set NA if either allele is NA.
+geno <- vapply(loci_keep, function(L) {
+  a1 <- trimws(raw[[paste0(L, " 1")]])
+  a2 <- trimws(raw[[paste0(L, " 2")]])
+  g  <- paste(a1, a2, sep = "/")
+  g[is.na(a1) | is.na(a2) | a1 == "" | a2 == ""] <- NA
+  g
+}, character(nrow(raw)))
+geno <- as.data.frame(geno, stringsAsFactors = FALSE)
+rownames(geno) <- rownames(raw)
+colnames(geno) <- loci_keep
+
+# --- 5. Build diploid, codominant genind ----
+gi <- df2genind(geno,
+                ploidy    = 2,
+                sep       = "/",
+                type      = "codom",
+                ind.names = rownames(geno),
+                loc.names = colnames(geno))
+cat(sprintf("\ngenind built: %d individuals | %d loci | %d alleles total\n",
+            nInd(gi), nLoc(gi), ncol(tab(gi))))
+
+# --- 5b. Missing-data summary ----
+loc_miss <- colMeans(is.na(geno))
+ind_miss <- rowMeans(is.na(geno))
+cat("\n=== Missing data ===\n")
+cat(sprintf("  Overall missing genotypes: %.1f%%\n", 100 * mean(is.na(geno))))
+cat("  Per-locus missing (%, top 6):\n")
+print(round(100 * sort(loc_miss, decreasing = TRUE)[1:min(6, length(loc_miss))], 1))
+hi <- names(which(ind_miss > 0.20))
+if (length(hi))
+  cat(sprintf("  Individuals >20%% missing (%d): %s\n",
+              length(hi), paste(hi, collapse = ", ")))
+
+# --- 5c. Apply identity curation (metadata.txt) ----
+# Collapses confirmed clones (duplicate_of != ""), attaches identity metadata,
+# and sets pop(gi) <- status. Replaces old sections 6/7/8.
+meta_path <- "C:/R/UA_Cherry_ID/data/metadata.txt"
+
+# na.strings set to a token that never occurs, so literal "NA" in `status`
+# stays a category (not R NA). Do NOT use character(0) — it errors on some
+# R versions with colClasses="character" ("replacement has 0 rows").
+md <- read.delim(meta_path, header = TRUE, sep = "\t",
+                 colClasses  = "character",
+                 na.strings  = "___NA___",
+                 quote       = "",
+                 check.names = FALSE,
+                 stringsAsFactors = FALSE)
+md <- md[, names(md) != "" & !grepl("^V[0-9]+$", names(md)), drop = FALSE]
+for (col in names(md)) md[[col]] <- trimws(md[[col]])
+
+# map gi individuals ("Name ... CODE") to metadata sample_name via whole-token match
+sn      <- md$sample_name
+gi_code <- vapply(strsplit(indNames(gi), "\\s+"), function(tk) {
+  hit <- sn[sn %in% tk]
+  if (length(hit) == 1L) hit else NA_character_
+}, character(1))
+if (any(is.na(gi_code)))
+  stop("No unique metadata sample_name token found in: ",
+       paste(indNames(gi)[is.na(gi_code)], collapse = ", "))
+md_gi <- md[match(gi_code, sn), ]
+
+# (1) collapse clones
+is_dup <- !is.na(md_gi$duplicate_of) & md_gi$duplicate_of != ""
+cat(sprintf("Collapsing %d clone sample(s): %s\n",
+            sum(is_dup), paste(gi_code[is_dup], collapse = ", ")))
+gi      <- gi[!is_dup, ]
+md_gi   <- md_gi[!is_dup, ]
+gi_code <- gi_code[!is_dup]
+cat(sprintf("Analysis set after clone-correction: %d individuals\n", nInd(gi)))
+
+# (2) attach identity metadata (not used for clustering)
+other(gi)[["meta"]] <- data.frame(
+  code      = gi_code,
+  aprior    = md_gi$aprior_name,
+  posterior = md_gi$posterior_name,
+  status    = md_gi$status,
+  S_geno    = md_gi$S_genotype,
+  stringsAsFactors = FALSE)
+
+# (3) status as cosmetic overlay; NA ordered last
+status_lv <- c("Modern cultivar", "Early selection cultivar",
+               "Landrace", "Wild", "NA")
+pop(gi) <- factor(md_gi$status,
+                  levels = status_lv[status_lv %in% md_gi$status])
+cat("\nStatus overlay (pop) counts:\n"); print(table(pop(gi)))
+
+# results dir (clone-corrected)
+results_dir <- file.path("results", paste0("cherry_", marker_set, "_cc"))
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+cat("\nOutput folder:", results_dir, "\n")
+cat("Curation complete. 'gi' (n =", nInd(gi),
+    ") ready — continue from section 6b.\n")
+
+# reconcile: which Modern-status samples went where
+table(md_gi$status)                       # after-curation status counts
+setdiff(md$posterior_name[md$status=="Modern cultivar"],
+        md_gi$posterior_name)             # Modern rows NOT in the 90-set
+```
+
+##DAPC_v3
+
+```{r}
+# ============================================================
+# --- 6a. Helpers (carried over from EABUA_DAPC v14) ----
+# theme_paper(): base-graphics paper styler.
+# cluster_cols(): colourblind-friendly K-length palette.
+# These lived in an earlier v14 chunk not carried into the new
+# assembly — defined here so this chunk is self-contained.
+# ============================================================
+library(adegenet)
+
+theme_paper <- function() {
+  par(
+    family    = "sans",      # clean sans-serif font
+    cex       = 1.0,         # base font size
+    cex.axis  = 0.9,
+    cex.lab   = 1.0,
+    cex.main  = 1.1,
+    font.main = 2,           # bold title
+    tcl       = -0.3,        # tick length inward
+    mgp       = c(2.2, 0.6, 0),
+    las       = 1,           # horizontal axis labels
+    bty       = "l"          # L-shaped box (no top/right border)
+  )
+}
+
+# Consistent colour palette for clusters (colourblind-friendly)
+cluster_cols <- function(k) {
+  base_pal <- c("#E41A1C","#377EB8","#4DAF4A","#984EA3",
+                "#FF7F00","#A65628","#F781BF","#999999")
+  if (k <= length(base_pal)) base_pal[seq_len(k)]
+  else rainbow(k)
+}
+
+# ============================================================
+# --- 6b. Data-driven n.pca selection ----
+# Runs PCA once to find how many PCs explain 95% of variance.
+# npca_95 replaces arbitrary n.pca=50 everywhere in the script.
+# ============================================================
+library(ade4)
+cat("Computing data-driven n.pca (PCs explaining 95% variance)...\n")
+pca_test <- dudi.pca(tab(gi, NA.method = "mean"),
+                     scannf = FALSE,
+                     nf     = min(nInd(gi) - 1, nLoc(gi)))
+cum_var  <- cumsum(pca_test$eig) / sum(pca_test$eig)
+npca_95  <- which(cum_var >= 0.95)[1]
+npca_bic <- npca_95   # used in BIC replicates
+npca_fc  <- npca_95   # used in find.clusters final run
+cat(sprintf("  Total PCs available:         %d\n", length(pca_test$eig)))
+cat(sprintf("  PCs explaining 95%% variance: %d  (npca_95)\n", npca_95))
+cat(sprintf("  --> Using n.pca = %d for all find.clusters() calls\n\n", npca_95))
+
+
+# ============================================================
+# --- 7. Replicated BIC — find optimal K (n=1000) ----
+# ============================================================
+set.seed(42)
+n_reps   <- 1000
+bic_list <- vector("list", n_reps)
+# Parameter rationale — BIC loop vs Step A:
+#
+#  BIC loop:  n_reps=1000, n.start=500, n.iter=1e6
+#    Work: 1000 x 500 x 1e6 ops  (~10 min observed on this dataset)
+#    1000 reps gives maximum BIC curve stability and tight SE bars.
+#    n.start=500 and n.iter=1e6 give reliable BIC per replicate.
+#    Further reps add negligible precision beyond n=1000.
+#
+#  Step A (run_dapc_for_k): 10 runs, n.start=500, n.iter=1e6
+#    Purpose: maximum-precision definitive cluster assignment.
+#    10 independent runs with stability check ensures global optimum.
+#    This is the publication-quality result.
+cat("Running", n_reps, "replicate BIC runs — please wait...\n")
+for (i in seq_len(n_reps)) {
+  fc <- find.clusters(gi, max.n.clust = 10, n.pca = npca_bic,
+                      n.iter = 1e6, n.start = 500,   # see rationale above
+                      choose.n.clust = FALSE)
+  bic_list[[i]] <- fc$Kstat
+  if (i %% 10 == 0) cat("  completed", i, "/", n_reps, "\n")
+}
+bic_reps <- do.call(cbind, bic_list)
+bic_mean <- apply(bic_reps, 1, mean)
+bic_sd   <- apply(bic_reps, 1, sd)
+bic_se   <- bic_sd / sqrt(n_reps)
+k_vals   <- 1:10
+
+# Paper-grade BIC plot
+theme_paper()
+par(mar = c(4.5, 4.5, 3.5, 1.5))
+plot(k_vals, bic_mean,
+     type = "b", pch = 19, col = "#2166AC", lwd = 1.5,
+     xlab = "Number of clusters (K)",
+     ylab = "BIC (mean \u00b1 SE)",
+     main = paste0("BIC vs. number of clusters\n(", n_reps, " replicates)"),
+     xlim = c(1, 10), xaxt = "n")
+axis(1, at = k_vals)
+arrows(k_vals, bic_mean - bic_se, k_vals, bic_mean + bic_se,
+       angle = 90, code = 3, length = 0.04, col = "#4D4D4D", lwd = 1)
+bic_plot <- recordPlot()
+
+# K selection diagnostics
+best_k       <- k_vals[which.min(bic_mean)]
+bic_diff2    <- diff(diff(bic_mean))
+elbow_k_auto <- which.max(abs(bic_diff2)) + 1
+
+bic_table <- data.frame(
+  K         = k_vals,
+  BIC_mean  = round(bic_mean, 2),
+  BIC_SD    = round(bic_sd,   2),
+  BIC_SE    = round(bic_se,   3),
+  delta_BIC = c(NA, round(diff(bic_mean), 2))
+)
+
+cat("\n=== K selection summary ===\n")
+cat(sprintf("%-44s %d\n", "K with lowest BIC (which.min):", best_k))
+cat(sprintf("%-44s %d\n", "K at largest curvature (auto elbow):", elbow_k_auto))
+cat("\nBIC table:\n")
+cat(sprintf("%-4s  %8s  %7s  %6s  %10s\n",
+            "K","BIC_mean","BIC_SD","BIC_SE","delta_BIC"))
+cat(strrep("-", 46), "\n")
+for (i in seq_len(nrow(bic_table))) {
+  cat(sprintf("%-4d  %8.2f  %7.2f  %6.3f  %s\n",
+              bic_table$K[i], bic_table$BIC_mean[i],
+              bic_table$BIC_SD[i], bic_table$BIC_SE[i],
+              ifelse(is.na(bic_table$delta_BIC[i]), "        NA",
+                     sprintf("%10.2f", bic_table$delta_BIC[i]))))
+}
+cat(strrep("-", 46), "\n")
+cat("delta_BIC: largest negative drop marks the elbow\n")
+cat("===========================\n\n")
+
+write.csv(bic_table, file.path(results_dir, "BIC_table.csv"), row.names = FALSE, quote = FALSE)
+
+
+# SET chosen_k — elbow detection:
+# The elbow is where delta_BIC STOPS being large, not where it IS largest.
+# Method: find K where the drop ratio drops below 20% of the maximum drop.
+bic_drops   <- abs(diff(bic_mean))             # absolute drops per K step
+drop_thresh <- max(bic_drops) * 0.20            # 20% of largest drop
+# Elbow = first K where the drop AFTER it falls below threshold
+elbow_pos   <- which(bic_drops < drop_thresh)[1]  # first 'small' drop position
+chosen_k    <- k_vals[elbow_pos]                  # K just before drops go small
+
+cat("\n=== Elbow detection ===\n")
+cat("Absolute BIC drops per K step:\n")
+for (ki in seq_along(bic_drops))
+  cat(sprintf("  K%d->K%d: %.2f%s\n", ki, ki+1, bic_drops[ki],
+              if (ki+1 == chosen_k) "  <- ELBOW" else ""))
+cat(sprintf("Drop threshold (20%% of max): %.2f\n", drop_thresh))
+cat(sprintf("Auto-detected elbow: K = %d\n", chosen_k))
+cat("Override manually if needed: chosen_k <- <value>\n")
+cat("=======================\n\n")
+
+
+# ============================================================
+# CROSS-VALIDATION TOGGLE
+# use_xval_npca controls which n.pca drives the FINAL DAPC:
+#   FALSE = a-score value drives the final DAPC (default; reproduces prior
+#           results). xvalDapc is still run and REPORTED as a cross-check.
+#   TRUE  = the cross-validated lowest-RMSE n.pca drives the final DAPC.
+# ============================================================
+use_xval_npca <- FALSE
+
+
+# ============================================================
+# Helper: run full DAPC pipeline for a given K
+# Returns list with all objects and plots needed
+# ============================================================
+run_dapc_for_k <- function(genind_obj, k_val, label, use_xval_npca = FALSE) {
+
+  cat(strrep("=", 50), "\n")
+  cat("  Running DAPC for K =", k_val, "(", label, ")\n")
+  cat(strrep("=", 50), "\n")
+
+  # Step A: find clusters — MAXIMUM PRECISION
+  # n.pca   = npca_fc  (data-driven, 95% PCA variance from section 6b)
+  # n.start = 500      (exhaustive search for global k-means optimum)
+  # n.iter  = 1e6      (full convergence, no iteration limit reached)
+  # 10 independent runs with stability check — publication quality
+  set.seed(42)
+  grp_runs <- lapply(1:10, function(s) {
+    find.clusters(genind_obj,
+                  n.clust        = k_val,
+                  n.pca          = npca_fc,
+                  n.iter         = 1e6,
+                  n.start        = 500,
+                  choose.n.clust = FALSE)
+  })
+  gs_list <- lapply(grp_runs, function(r) sort(as.vector(table(r$grp))))
+  stable  <- all(sapply(gs_list, identical, gs_list[[1]]))
+  if (stable) {
+    cat("  Stability check: PASSED (10/10 runs identical group sizes)\n")
+  } else {
+    cat("  Stability check: WARNING — group sizes differ across 10 runs\n")
+    cat("  Unexpected with n.start=500; check data quality\n")
+    for (s in seq_along(gs_list))
+      cat(sprintf("    Run %d: %s\n", s, paste(gs_list[[s]], collapse = " ")))
+  }
+  grp_k <- grp_runs[[1]]   # use first run (all equivalent if stable)
+  cat("Group sizes:\n"); print(table(grp_k$grp))
+
+  # Step B: a-score optimisation
+  # n.pca ceiling = npca_fc (data-driven) not fixed 30
+  n_da_k   <- k_val - 1
+  dapc_tmp <- dapc(genind_obj, grp_k$grp,
+                   n.pca = npca_fc,
+                   n.da  = n_da_k)
+  theme_paper()
+  par(mar = c(4.5, 4.5, 4, 1.5))
+  a_opt_k    <- optim.a.score(dapc_tmp)
+  ascore_plt <- recordPlot()
+  npca_k     <- a_opt_k$best
+  cat("Optimal n.pca (a-score):", npca_k, "\n")
+
+  # ------------------------------------------------------------
+  # Step B2: cross-validation of n.pca (xvalDapc) — CROSS-CHECK
+  # More rigorous than the a-score. Reports the n.pca that minimises
+  # cross-validated assignment error (lowest RMSE) and the n.pca that
+  # maximises mean successful assignment. result = "groupMean" is used
+  # because cluster sizes are unequal. Wrapped in tryCatch so a failure
+  # (e.g. a very small cluster at high K) never kills the run.
+  # ------------------------------------------------------------
+  set.seed(42)
+  x_mat        <- tab(genind_obj, NA.method = "mean")
+  npca_ceiling <- min(npca_fc, nInd(genind_obj) - 1)
+  theme_paper()
+  par(mar = c(4.5, 4.5, 4, 1.5))
+  xval <- tryCatch(
+    xvalDapc(x_mat, grp_k$grp,
+             n.pca.max    = npca_ceiling,
+             training.set = 0.9,
+             result       = "groupMean",
+             n.rep        = 100,
+             xval.plot    = TRUE),
+    error = function(e) {
+      cat("  xvalDapc failed:", conditionMessage(e), "\n"); NULL
+    })
+
+  if (!is.null(xval)) {
+    xval_plt       <- recordPlot()
+    npca_xval_mse  <- as.integer(as.character(
+                        xval[["Number of PCs Achieving Lowest MSE"]]))
+    npca_xval_succ <- as.integer(as.character(
+                        xval[["Number of PCs Achieving Highest Mean Success"]]))
+    cat(sprintf("  xvalDapc: lowest-RMSE n.pca = %d | highest-success n.pca = %d\n",
+                npca_xval_mse, npca_xval_succ))
+  } else {
+    xval_plt       <- NULL
+    npca_xval_mse  <- NA_integer_
+    npca_xval_succ <- NA_integer_
+  }
+
+  # Step C: final DAPC — n.pca from a-score (default) or xval (toggle)
+  use_xv     <- isTRUE(use_xval_npca) && !is.na(npca_xval_mse)
+  npca_final <- if (use_xv) npca_xval_mse else npca_k
+  if (isTRUE(use_xval_npca) && is.na(npca_xval_mse))
+    cat("  (xval unavailable — falling back to a-score n.pca for final DAPC)\n")
+  cat(sprintf("  Final DAPC uses n.pca = %d  (source: %s)\n",
+              npca_final, if (use_xv) "xval lowest-RMSE" else "a-score"))
+
+  dapc_k <- dapc(genind_obj, grp_k$grp, n.pca = npca_final, n.da = n_da_k)
+  cat("DAPC K =", k_val, "| n.pca:", dapc_k$n.pca,
+      "| n.da:", dapc_k$n.da, "\n")
+
+  # Step D: custom scatter — DA1 vs DA2 with ellipses + eigenvalue barplot
+  pal_k  <- cluster_cols(k_val)
+  pch_k  <- c(15,16,17,18,8,11,12,13)[seq_len(k_val)]
+
+  # Extract DA scores and group assignments
+  scores  <- as.data.frame(dapc_k$ind.coord)
+  grp_vec <- dapc_k$grp
+  eig_k   <- dapc_k$eig
+  pct_k   <- round(100 * eig_k / sum(eig_k), 1)
+  n_da_actual <- ncol(scores)
+
+  # DA axis labels with % variance
+  xlab_da <- paste0("DA 1 (", pct_k[1], "%)")
+  ylab_da <- if (n_da_actual >= 2) paste0("DA 2 (", pct_k[2], "%)")
+             else "DA 2 (0%)"
+
+  # Layout: scatter left (wider), eigenvalue barplot right (narrower)
+  theme_paper()
+  layout(matrix(c(1, 2), 1, 2), widths = c(3.8, 1.2))
+
+  # --- Panel 1: DA1 vs DA2 scatter ---
+  par(mar = c(4.5, 4.5, 3.5, 0.5))
+  x_range <- range(scores[,1])
+  y_range <- if (n_da_actual >= 2) range(scores[,2]) else c(-1, 1)
+  # Add 20% padding so points and ellipses don't touch borders
+  xpad <- diff(x_range) * 0.20
+  ypad <- diff(y_range) * 0.20
+  x_range <- c(x_range[1] - xpad, x_range[2] + xpad)
+  y_range <- c(y_range[1] - ypad, y_range[2] + ypad)
+
+  plot(NA, xlim = x_range, ylim = y_range,
+       xlab = xlab_da, ylab = ylab_da,
+       main = paste0("DAPC scatter  (K = ", k_val, ")"))
+  abline(h = 0, v = 0, col = "grey80", lty = 2, lwd = 0.8)
+
+  # 95% inertia ellipses per cluster (base R, no extra packages)
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    if (length(idx) < 3) next
+    pts <- cbind(scores[idx, 1],
+                 if (n_da_actual >= 2) scores[idx, 2] else rep(0, length(idx)))
+    cov_m  <- cov(pts)
+    centre <- colMeans(pts)
+    eig_e  <- eigen(cov_m)
+    theta  <- seq(0, 2*pi, length.out = 200)
+    chi2   <- sqrt(qchisq(0.95, df = 2))
+    ell    <- chi2 * eig_e$vectors %*%
+              diag(sqrt(eig_e$values)) %*%
+              rbind(cos(theta), sin(theta))
+    ell[1,] <- ell[1,] + centre[1]
+    ell[2,] <- ell[2,] + centre[2]
+    polygon(ell[1,], ell[2,],
+            col    = adjustcolor(pal_k[ci], alpha.f = 0.15),
+            border = pal_k[ci], lwd = 1.2, lty = 1)
+  }
+
+  # Points
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    points(scores[idx, 1],
+           if (n_da_actual >= 2) scores[idx, 2] else rep(0, length(idx)),
+           col = pal_k[ci], pch = pch_k[ci], cex = 1.1)
+  }
+
+  # Cluster centroids
+  for (ci in seq_len(k_val)) {
+    idx <- which(grp_vec == levels(grp_vec)[ci])
+    cx  <- mean(scores[idx, 1])
+    cy  <- if (n_da_actual >= 2) mean(scores[idx, 2]) else 0
+    points(cx, cy, col = pal_k[ci], pch = pch_k[ci], cex = 2.2, lwd = 2)
+  }
+
+  # Legend — placed OUTSIDE plot area in bottom-left margin to avoid overlap
+  legend("bottomleft",
+         legend   = paste0("Cluster ", seq_len(k_val)),
+         col      = pal_k,
+         pch      = pch_k,
+         pt.cex   = 1.0,
+         cex      = 0.75,
+         bty      = "o",       # box around legend for readability
+         bg       = "white",   # opaque background
+         box.col  = "grey70",
+         y.intersp = 0.85,
+         x.intersp = 0.7)
+
+  # --- Panel 2: Eigenvalue barplot ---
+  par(mar = c(4.5, 3.5, 4.5, 1))   # extra top margin for DA1 label
+  bar_cols <- rep("grey75", length(eig_k))
+  bar_cols[1] <- pal_k[1]
+  if (length(bar_cols) >= 2) bar_cols[2] <- pal_k[2]
+
+  # Draw bars without x-axis labels (avoids R skipping even labels)
+  bp <- barplot(pct_k,
+                col       = bar_cols,
+                border    = "white",
+                horiz     = FALSE,
+                axes      = FALSE,
+                names.arg = rep("", length(pct_k)),  # blank; add manually below
+                ylim      = c(0, max(pct_k) * 1.15), # extra headroom for labels
+                main      = "DA eigenvalues",
+                ylab      = "")
+
+  # Add x-axis labels via mtext — never thinned by axis() overlap-suppression.
+  # (axis() silently drops labels that would collide, which previously hid DA2
+  #  when there were 3+ narrow bars; mtext places every label unconditionally.)
+  mtext(paste0("DA", seq_along(pct_k)), side = 1, at = bp,
+        line = 0.4, cex = 0.72, las = 1)
+
+  axis(2, las = 0, cex.axis = 0.75)
+  mtext("% variance", side = 2, line = 2.3, cex = 0.8, las = 0)
+
+  # Value labels inside the top headroom — only for bars >= 1%
+  for (bi in seq_along(pct_k)) {
+    if (pct_k[bi] >= 1) {
+      text(bp[bi], pct_k[bi] + max(pct_k) * 0.04,
+           labels = paste0(pct_k[bi], "%"),
+           cex = 0.65, col = "grey20", xpd = TRUE)
+    }
+  }
+
+  # Reset layout
+  layout(1)
+  scatter_plt <- recordPlot()
+
+  # Step E: compoplot (paper-grade)
+  pop_sz  <- as.vector(table(pop(genind_obj)[drop = FALSE]))
+  pop_nm  <- names(table(pop(genind_obj)[drop = FALSE]))
+  pop_cs  <- cumsum(pop_sz)
+  pop_mid <- pop_cs - pop_sz / 2
+
+  theme_paper()
+  par(mar = c(6, 4.5, 7, 1.5))
+  compoplot(dapc_k,
+            posi     = "bottomright",
+            txt.leg  = paste0("Cluster ", seq_len(k_val)),
+            lab      = "",
+            col      = pal_k,
+            xlab     = "",
+            space    = 0,
+            show.lab = FALSE,
+            border   = NA)          # no bar borders = cleaner look
+  title(xlab = "Individuals", ylab = "Membership probability", line = 3)
+  abline(v   = pop_cs[-length(pop_cs)] + 0.5,
+         col = "grey20", lty = 2, lwd = 1.2)
+  usr_k <- par("usr")
+  text(x      = pop_mid,
+       y      = usr_k[4] + (usr_k[4] - usr_k[3]) * 0.06,
+       labels = pop_nm,
+       srt    = 45, adj = c(0, 0), xpd = TRUE, cex = 0.8,
+       font   = 1)
+  compo_plt <- recordPlot()
+
+  # Step F: Q-scores table
+  qs <- as.data.frame(dapc_k$posterior)
+  colnames(qs) <- paste0("Cluster_", seq_len(ncol(qs)))
+  qs <- cbind(sample_name      = rownames(qs),
+              pop_name         = as.character(pop(genind_obj)),
+              assigned_cluster = as.character(grp_k$grp),
+              qs)
+
+  # Step G: eigenvalue table
+  eig_vals <- dapc_k$eig
+  eig_tab  <- data.frame(
+    DA          = seq_along(eig_vals),
+    Eigenvalue  = round(eig_vals, 4),
+    Percent_var = round(100 * eig_vals / sum(eig_vals), 2)
+  )
+
+  list(k         = k_val,
+       label     = label,
+       grp       = grp_k,
+       dapc      = dapc_k,
+       npca      = npca_k,          # a-score optimum
+       npca_xval = npca_xval_mse,   # xval lowest-RMSE optimum (NA if failed)
+       npca_used = npca_final,      # what the final DAPC actually used
+       pal       = pal_k,
+       ascore    = ascore_plt,
+       xval      = xval_plt,        # NULL if xval failed
+       scatter   = scatter_plt,
+       compo     = compo_plt,
+       qscores   = qs,
+       eigvals   = eig_tab)
+}
+
+# ============================================================
+# Helper: save all outputs for one DAPC result
+# ============================================================
+save_dapc_outputs <- function(res, prefix) {
+  k  <- res$k
+
+  pdf(paste0(prefix, "_ascore.pdf"),   width = 6,  height = 5)
+  replayPlot(res$ascore);  dev.off()
+
+  if (!is.null(res$xval)) {
+    pdf(paste0(prefix, "_xval.pdf"),   width = 6,  height = 5)
+    replayPlot(res$xval);  dev.off()
+  }
+
+  pdf(paste0(prefix, "_scatter.pdf"),  width = 8,  height = 6)
+  replayPlot(res$scatter); dev.off()
+
+  pdf(paste0(prefix, "_compoplot.pdf"), width = 12, height = 5)
+  replayPlot(res$compo);   dev.off()
+
+  write.csv(res$qscores,
+            paste0(prefix, "_Qscores.csv"),
+            row.names = FALSE, quote = FALSE)
+  write.table(res$qscores,
+              paste0(prefix, "_Qscores.txt"),
+              sep = "\t", row.names = FALSE, quote = FALSE)
+  write.csv(res$eigvals,
+            paste0(prefix, "_eigenvalues.csv"),
+            row.names = FALSE, quote = FALSE)
+
+  cat("\nOutputs saved for K =", k, "(", res$label, "):\n")
+  cat("  ", basename(paste0(prefix, "_ascore.pdf")),    "\n")
+  if (!is.null(res$xval))
+    cat("  ", basename(paste0(prefix, "_xval.pdf")),    "\n")
+  cat("  ", basename(paste0(prefix, "_scatter.pdf")),   "\n")
+  cat("  ", basename(paste0(prefix, "_compoplot.pdf")), "\n")
+  cat("  ", basename(paste0(prefix, "_Qscores.csv")),   "\n")
+  cat("  ", basename(paste0(prefix, "_Qscores.txt")),   "\n")
+  cat("  ", basename(paste0(prefix, "_eigenvalues.csv")),"\n")
+}
+
+# ============================================================
+# --- 8-12. Primary K analysis ----
+# ============================================================
+res_primary <- run_dapc_for_k(gi, chosen_k, "primary", use_xval_npca)
+
+# Save BIC plot (shared)
+pdf(file.path(results_dir, "DAPC_BIC.pdf"), width = 6, height = 5)
+replayPlot(bic_plot); dev.off()
+
+# Save primary outputs
+save_dapc_outputs(res_primary,
+                  paste0(file.path(results_dir, "DAPC_K"), chosen_k))
+
+cat("\nShared outputs:\n")
+cat("  DAPC_BIC.pdf\n")
+cat("  BIC_table.csv\n")
+
+# ============================================================
+# --- 13. SENSITIVITY ANALYSIS — secondary K (optional) ----
+# ============================================================
+run_secondary <- TRUE   # <-- set TRUE when ready; primary need not re-run
+
+# secondary_k auto-set to absolute BIC minimum (best_k)
+# Override: secondary_k <- 6
+secondary_k <- if (chosen_k != best_k) best_k else min(chosen_k + 2, max(k_vals))
+cat(sprintf("secondary_k auto-set to: %d  (chosen_k=%d elbow, best_k=%d abs.min BIC)\n",
+            secondary_k, chosen_k, best_k))
+cat("Override: secondary_k <- <value>  then re-run from here\n")
+
+if (run_secondary) {
+  res_secondary <- run_dapc_for_k(gi, secondary_k, "secondary", use_xval_npca)
+  save_dapc_outputs(res_secondary,
+                    paste0(file.path(results_dir, "DAPC_K"), secondary_k))
+} else {
+  cat("Secondary analysis skipped.\n")
+  cat("To run: set run_secondary <- TRUE and re-run from section 13 only.\n")
+  cat("  (res_primary, gi, chosen_k, best_k must exist in environment)\n")
+}
+
+# --- Write a standalone secondary-only script for convenience ---
+secondary_script <- c(
+  '# ============================================================',
+  '# DAPC_secondary_only.R',
+  '# Run secondary K analysis WITHOUT repeating primary.',
+  '# Prerequisites: run main script first (sections 0-12 complete),',
+  '#   then source() this file or paste into same R session.',
+  '# Objects needed: gi, chosen_k, best_k, k_vals, npca_fc, use_xval_npca,',
+  '#   run_dapc_for_k(), save_dapc_outputs(), theme_paper(),',
+  '#   cluster_cols() — all created by the main script.',
+  '# ============================================================',
+  '',
+  '# Set your desired secondary K here:',
+  'secondary_k <- if (chosen_k != best_k) best_k else min(chosen_k + 2, max(k_vals))',
+  'cat("Running secondary K =", secondary_k, "\\n")',
+  '',
+  'res_secondary <- run_dapc_for_k(gi, secondary_k, "secondary", use_xval_npca)',
+  'save_dapc_outputs(res_secondary, paste0(file.path(results_dir, "DAPC_K"), secondary_k))',
+  '',
+  '# Update summary to include secondary results:',
+  'cat("\\n  SECONDARY K =", secondary_k, "\\n")',
+  'cat(sprintf("    n.pca: %d  n.da: %d  a-score PCs: %d  xval PCs: %s\\n",',
+  '            res_secondary$dapc$n.pca, res_secondary$dapc$n.da,',
+  '            res_secondary$npca, as.character(res_secondary$npca_xval)))',
+  'cat("    Group sizes:\\n")',
+  'gs2 <- table(res_secondary$grp$grp)',
+  'for (g in names(gs2)) cat(sprintf("      Cluster %s: %d\\n", g, gs2[g]))',
+  'cat("    DA eigenvalues:\\n")',
+  'print(res_secondary$eigvals)'
+)
+writeLines(secondary_script, file.path(results_dir, "DAPC_secondary_only.R"))
+cat("Standalone secondary script written: DAPC_secondary_only.R\n")
+
+# ============================================================
+# FINAL SUMMARY
+# ============================================================
+cat("\n", strrep("=", 55), "\n", sep = "")
+cat("  DAPC ANALYSIS COMPLETE — RESULTS SUMMARY\n")
+cat(strrep("=", 55), "\n")
+cat(sprintf("  Dataset:       %d individuals, %d loci\n",
+            nInd(gi), nLoc(gi)))
+cat(sprintf("  n.pca (data-driven, 95%% PCA variance): %d\n", npca_95))
+cat(sprintf("  BIC replicates: %d (n.pca=%d, n.start=500, n.iter=1e6)\n",
+            n_reps, npca_bic))
+cat(sprintf("  find.clusters final: n.pca=%d, n.start=500, n.iter=1e6\n",
+            npca_fc))
+cat(sprintf("  Final n.pca source: %s\n",
+            if (isTRUE(use_xval_npca)) "xvalDapc (lowest RMSE)" else "a-score"))
+cat(sprintf("  K (lowest BIC): %d  |  K (elbow): %d\n",
+            best_k, elbow_k_auto))
+cat("\n  PRIMARY K =", chosen_k, "\n")
+cat(sprintf("    n.pca: %d  |  n.da: %d  |  a-score PCs: %d  |  xval PCs: %s\n",
+            res_primary$dapc$n.pca,
+            res_primary$dapc$n.da,
+            res_primary$npca,
+            as.character(res_primary$npca_xval)))
+cat("    Group sizes:\n")
+gs <- table(res_primary$grp$grp)
+for (g in names(gs)) cat(sprintf("      Cluster %s: %d individuals\n", g, gs[g]))
+cat("    DA eigenvalues:\n")
+print(res_primary$eigvals)
+
+if (run_secondary) {
+  cat("\n  SECONDARY K =", secondary_k, "\n")
+  cat(sprintf("    n.pca: %d  |  n.da: %d  |  a-score PCs: %d  |  xval PCs: %s\n",
+              res_secondary$dapc$n.pca,
+              res_secondary$dapc$n.da,
+              res_secondary$npca,
+              as.character(res_secondary$npca_xval)))
+  cat("    Group sizes:\n")
+  gs2 <- table(res_secondary$grp$grp)
+  for (g in names(gs2)) cat(sprintf("      Cluster %s: %d individuals\n", g, gs2[g]))
+  cat("    DA eigenvalues:\n")
+  print(res_secondary$eigvals)
+}
+
+cat("\n  Files in results/:\n")
+ff <- sort(list.files(results_dir))
+for (f in ff) cat("    ", f, "\n")
+cat(strrep("=", 55), "\n")
+```
