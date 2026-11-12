@@ -1,6 +1,6 @@
 ---
-title: "UA Cherry ID — Direct-match & Paternity testing (Familias replacement)"
-subtitle: "Familias-style search over the ECPGR 2021 (Ordidge + Barreneche) 14-SSR reference"
+title: "02.UA_Cherry_ID_Paternity — direct-match & parentage search (Familias replacement)"
+subtitle: "Familias-style blind search over the ECPGR 2021 (Ordidge + Barreneche) 14-SSR reference · version 6.1.0"
 author: "Yaroslav Ivanovych"
 date: today
 format:
@@ -14,6 +14,27 @@ execute:
   warning: false
   message: false
 ---
+
+## Version
+
+| | |
+|---|---|
+| **Script** | `02.UA_Cherry_ID_Paternity.qmd` |
+| **Version** | **6.1.0** (2026-11-12) — set in `script_version` below; printed and written to `<out_prefix>_run_info.txt` |
+| **Project** | UA sweet cherry ID (Ivanovych 2026) — manuscript §2.6, streams (ii) ECPGR × ECPGR (Table S7) and (iii) UKR × ECPGR (Table S8) |
+| **Inputs** | `data/ECPGR_2021_Ordidge_Barreneche_Cherry DB.txt` (2,394 × 14 SSR), `data/AFP_ECPGR_…_Familias_recalc.txt` (allele frequencies), optional `data/UKR_Cherry_90_harmonised_query.txt` (90 × 6 harmonised loci) |
+| **Outputs** | `results/cherry_ID/<out_prefix>.txt` (Familias-style table), `<out_prefix>_run_info.txt` |
+| **Versioning** | MAJOR = method generation (v1–v6 of July 2026 = 1.0–6.0); MINOR = new options or documentation, no change of results; PATCH = bug fixes. Superseded files are kept in `etc/` as `02.UA_Cherry_ID_Paternity_v<N>.qmd`. |
+
+### CHANGELOG
+
+- **6.1.0** (2026-11-12) — versioning and reproducibility only; **the computational chunks (`load`, `functions`, `screen`, `build`, `verify`) are unchanged from 6.0**. Added: `script_version`; one project root (`proj_root`) instead of repeated absolute paths; **run profiles** `ECPGR_vs_ECPGR` (= the parameter values of 6.0 as left on 2026-07-14) and `UKR_vs_ECPGR` (= the values of 5.0, the last version run with the query file, plus `query_vs_db_only = TRUE`) — *the exact settings of the Table S8 run are not recorded; check them against the output file before re-running*; a `run-info` chunk writing version, profile, parameters, R version and input MD5s.
+- **6.0** (2026-07-14, file `02…_v6.qmd`) — `query_vs_db_only` (Accession 2 restricted to the reference DB); parameters set for the ECPGR all-against-all run (`query_file = NULL`, `search_modes = Direct-match + Parent-Child`, `min_overlap = 6`, `dm_lr_min = 1`, `rel_share_min = 0`, `out_prefix = …_R_test_2`).
+- **5.0** (2026-07-13) — `dm_lr_min` (Direct-match LR floor); query–query pairs reported once.
+- **4.0** (2026-07-13) — union-find of Direct-match clusters rewritten without `<<-` (fixed the "object not found" error).
+- **3.0** (2026-07-13) — parameter block on the author's paths; output folder `results/cherry_ID`.
+- **2.0** (2026-07-12) — `bin_tol` per-pair ±1 bp snapping; triage `Note` (P–O candidate vs sib/relative); optional Full-sib / Half-sib / Cousins modes.
+- **1.0** (2026-07-12) — first version: Direct-match and Parent–Child over 2,394 profiles; per-locus *P*(genotypes | IBD), ML κ (Milligan 2003), φ, *r*, LR, IBS, inconsistency count; frequency floor 10⁻⁶ for unknown alleles.
 
 ## What this does
 
@@ -35,30 +56,48 @@ and a triage **Note**.
 ## Parameters — edit here
 
 ```{r params}
-setwd("C:/R/UA_Cherry_ID/")                       # project root
-geno_file  <- "C:/R/UA_Cherry_ID/data/ECPGR_2021_Ordidge_Barreneche_Cherry DB.txt"
-#geno_file  <- "C:/R/UA_Cherry_ID/data/EU Cherry Barreneche, 2021, 14 SSR - 314 genotypes. 14 SSR data.txt"
+script_version <- "6.1.0"
+proj_root      <- "C:/R/UA_Cherry_ID"                 # project root (contains data/ and results/)
+setwd(proj_root)
+data_dir       <- file.path(proj_root, "data")
+results_dir    <- file.path(proj_root, "results", "cherry_ID")
 
-freq_file  <- "C:/R/UA_Cherry_ID/data/AFP_ECPGR_Sw.Cherry ID - Ordidge_Barreneche, 2021, ECPGR - Familias_recalc.txt"
-#query_file  <- "C:/R/UA_Cherry_ID/data/UKR_Cherry_90_harmonised_query.txt"
-query_file <- NULL  # optional: path to YOUR samples (same wide data format, e.g. harmonised UKR).
-                     # If set, those samples are searched against the reference DB.
-query_names<- NULL   # or restrict to names already in the DB, e.g. readLines("ukr_query_ids.txt")
-query_vs_db_only <- TRUE  # TRUE = Accession 2 is reference-DB only (drop query-vs-query rows)
+geno_file <- file.path(data_dir, "ECPGR_2021_Ordidge_Barreneche_Cherry DB.txt")
+#geno_file <- file.path(data_dir, "EU Cherry Barreneche, 2021, 14 SSR - 314 genotypes. 14 SSR data.txt")
+freq_file <- file.path(data_dir, "AFP_ECPGR_Sw.Cherry ID - Ordidge_Barreneche, 2021, ECPGR - Familias_recalc.txt")
 
-results_dir<- "C:/R/UA_Cherry_ID/results/cherry_ID"
-out_prefix <- "ECPGR_2021_Ordidge_Barreneche_Cherry_ID_matches_R_test_2"
-#out_prefix <- "UKR_Cherry_vs_EU.Cherry_Barreneche_Cherry_ID_matches"
+# ── Run profile ──────────────────────────────────────────────────────────────
+#   "ECPGR_vs_ECPGR" : stream (ii), all-against-all in the reference (Table S7) — values of 6.0
+#   "UKR_vs_ECPGR"   : stream (iii), 90 harmonised UKR accessions vs the reference (Table S8)
+#                      — values of 5.0 + query_vs_db_only; confirm against the Table S8 output
+run_profile <- "ECPGR_vs_ECPGR"
 
-search_modes    <- c("Direct-match", "Parent-Child")   # "Parent-Child" add "Full-sib","Half-sib","Cousins"
-match_threshold <- 1     # Direct-match: max mismatching loci
-pc_max_incons   <- 1     # Parent-Child: max Mendelian (IBS=0) loci
-min_overlap     <- 6     # min co-typed loci for a pair to be reported
-bin_tol         <- 1     # allele match tolerance in bp (1 = merge 151/152-type wobble; 0 = exact)
-mutation_rate   <- 0     # 0 = as Familias (no mutation); >0 gives 1-inconsistency PC pairs a small LR
-dm_lr_min       <- 1   #1e4 # Direct-match: min LR to report (0 = all; raise to keep only rare-genotype clones)
-rel_share_min   <- 0   #0.50 relatives prefilter: min fraction of shared alleles
-rel_lr_min      <- 100   # relatives: min LR to report a Full/Half-sib or Cousin row
+query_names      <- NULL    # or restrict to names already in the DB, e.g. readLines("ukr_query_ids.txt")
+query_vs_db_only <- TRUE    # TRUE = Accession 2 is reference-DB only (drop query-vs-query rows)
+match_threshold  <- 1       # Direct-match: max mismatching loci
+pc_max_incons    <- 1       # Parent-Child: max Mendelian (IBS=0) loci
+bin_tol          <- 1       # allele match tolerance in bp (1 = merge 151/152-type wobble; 0 = exact)
+mutation_rate    <- 0       # 0 = as Familias (no mutation); >0 gives 1-inconsistency PC pairs a small LR
+rel_lr_min       <- 100     # relatives: min LR to report a Full/Half-sib or Cousin row
+
+if (run_profile == "ECPGR_vs_ECPGR") {
+  query_file    <- NULL
+  out_prefix    <- "ECPGR_2021_Ordidge_Barreneche_Cherry_ID_matches_R_test_2"
+  search_modes  <- c("Direct-match", "Parent-Child")  # add "Full-sib","Half-sib","Cousins"
+  min_overlap   <- 6        # min co-typed loci for a pair to be reported
+  dm_lr_min     <- 1        # Direct-match: min LR to report (0 = all)
+  rel_share_min <- 0        # relatives prefilter: min fraction of shared alleles
+} else if (run_profile == "UKR_vs_ECPGR") {
+  query_file    <- file.path(data_dir, "UKR_Cherry_90_harmonised_query.txt")
+  out_prefix    <- "UKR_Cherry_vs_ECPGR_2021_Ordidge_Barreneche_Cherry_ID_matches"
+  search_modes  <- c("Direct-match")
+  min_overlap   <- 5
+  dm_lr_min     <- 1e4
+  rel_share_min <- 0.50
+} else stop("unknown run_profile: ", run_profile)
+
+cat(sprintf("02.UA_Cherry_ID_Paternity v%s | profile %s | %s\n",
+            script_version, run_profile, format(Sys.time(), "%Y-%m-%d %H:%M")))
 ```
 
 ## Load data (+ optional query file)
@@ -311,4 +350,25 @@ if (nrow(res)) {
 
 ```{r session}
 sessionInfo()
+```
+
+## Run information
+
+```{r run-info}
+# Version, profile, parameters, R version and input MD5s, next to the output table.
+info <- c(
+  sprintf("script       02.UA_Cherry_ID_Paternity.qmd v%s", script_version),
+  sprintf("run          %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
+  sprintf("profile      %s", run_profile),
+  sprintf("R            %s", R.version.string),
+  sprintf("geno_file    %s  md5 %s", basename(geno_file), unname(tools::md5sum(geno_file))),
+  sprintf("freq_file    %s  md5 %s", basename(freq_file), unname(tools::md5sum(freq_file))),
+  if (!is.null(query_file))
+    sprintf("query_file   %s  md5 %s", basename(query_file), unname(tools::md5sum(query_file))),
+  sprintf("search_modes %s", paste(search_modes, collapse = ", ")),
+  sprintf("params       match_threshold=%s pc_max_incons=%s min_overlap=%s bin_tol=%s mutation_rate=%s dm_lr_min=%s rel_share_min=%s rel_lr_min=%s query_vs_db_only=%s",
+          match_threshold, pc_max_incons, min_overlap, bin_tol, mutation_rate,
+          dm_lr_min, rel_share_min, rel_lr_min, query_vs_db_only))
+writeLines(info, file.path(results_dir, paste0(out_prefix, "_run_info.txt")))
+cat(info, sep = "\n")
 ```

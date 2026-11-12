@@ -27,9 +27,10 @@ UA_Cherry_ID_Ivanovych_2026/
 │   ├── CLUMPP/                                      # CLUMPP 1.1.2 consensus Q-matrices (K = 2, 4, 7) and paramfile
 │   └── DARwin_PCoA/                                 # DARwin 6 dissimilarity / factorial-analysis output (internal use; not reported)
 ├── R_UA_Cherry_ID/
-│   ├── 01.UA_Cherry_ID_DAPC.qmd                     # DAPC (adegenet): data import, n.pca selection, BIC, K = 3 assignment
-│   ├── 02.UA_Cherry_ID_Paternity_v6.qmd             # direct-match and parentage search against the ECPGR reference (Familias-style LR)
-│   └── data/                                        # inputs for 02: harmonised UKR query (90 × 6 loci) and ECPGR reference files
+│   ├── 01.UA_Cherry_ID_DAPC.qmd                     # v3.1.0 — DAPC (adegenet): identity curation (n = 90), n.pca, replicated BIC, K = 3 / 4, xvalDapc
+│   ├── 02.UA_Cherry_ID_Paternity.qmd                # v6.1.0 — direct-match and parentage search vs the ECPGR reference (Familias-style LR)
+│   ├── 03.UA_Cherry_ID_Harmonise_ECPGR.py           # v1.0.1 — calibration of six SSR loci to the ECPGR scale (Supplementary Table S3)
+│   └── data/                                        # inputs for 01–03: UKR genotypes and metadata, harmonised UKR query (90 × 6 loci), ECPGR reference files
 ├── UA_Cherry_ID_Ivanovych_2026.ipynb                # Python: structureHarvester / Evanno ΔK, CLUMPP indfile, bar plots, BIC plot, pedigree figure
 ├── LICENSE
 └── README.md
@@ -41,14 +42,27 @@ UA_Cherry_ID_Ivanovych_2026/
 - **Missing data** are coded `*` in the genotype file and `0` in the harmonised query file.
 - **Clone correction:** four duplicate accessions (`OTR/2`, `TAY/1`, `ZOR/1`, `OLE/2`) were removed before structure analyses, leaving n = 90.
 - *S*-locus markers (PaConsI, PaConsII, F-box) were excluded from DAPC and STRUCTURE because they violate neutrality and linkage-equilibrium assumptions.
-- Allele sizes at six SSR loci shared with the ECPGR panel were calibrated to the ECPGR reference scale (Supplementary Table S3 of the article); the harmonised profiles are in `R_UA_Cherry_ID/data/UKR_Cherry_90_harmonised_query.txt`.
+- Allele sizes at six SSR loci shared with the ECPGR panel were calibrated to the ECPGR reference scale (Supplementary Table S3 of the article); the harmonised profiles are in `R_UA_Cherry_ID/data/UKR_Cherry_90_harmonised_query.txt`. `03.UA_Cherry_ID_Harmonise_ECPGR.py` regenerates Table S3 and the 94 × 6 harmonised matrix from the raw genotypes; it checks its own counts against the published Table S3 (10 regression checks) and stops with an error if any differs.
+
+## Code and versioning
+
+Each script carries its version inside the file (`script_version` in the `.qmd` files, `VERSION` in the `.py` file), prints it when run, and writes it to a run record next to its outputs (`DAPC_run_info.txt`, `<out_prefix>_run_info.txt`, `manifest.json` with input and output checksums). A CHANGELOG at the top of each file lists every version. Version numbers: MAJOR = method change (results may differ), MINOR = new options or documentation (results unchanged), PATCH = fixes. File names carry no version; earlier versions are in the git history.
+
+| Script | Version | Run | Outputs |
+|---|---|---|---|
+| `01.UA_Cherry_ID_DAPC.qmd` | 3.1.0 | RStudio / Quarto, *Run All*; set `proj_root` | `results/cherry_SSR_cc/` |
+| `02.UA_Cherry_ID_Paternity.qmd` | 6.1.0 | RStudio / Quarto; set `proj_root` and `run_profile` (`ECPGR_vs_ECPGR` or `UKR_vs_ECPGR`) | `results/cherry_ID/` |
+| `03.UA_Cherry_ID_Harmonise_ECPGR.py` | 1.0.1 | `python 03.UA_Cherry_ID_Harmonise_ECPGR.py` (Python ≥ 3.8, openpyxl) from `R_UA_Cherry_ID/` | `results/harmonise/` |
+
+The Jupyter notebook (`UA_Cherry_ID_Ivanovych_2026.ipynb`) is kept as run for the figures.
 
 ## Software
 
 | Analysis | Software |
 |---|---|
 | Parentage, Ukrainian panel (94 × 18 SSR) | Familias 3.4.1 |
-| Direct-match and parentage vs. ECPGR reference | R / Quarto (`02.UA_Cherry_ID_Paternity_v6.qmd`) |
+| Allele-size calibration to the ECPGR scale (Table S3) | Python 3, openpyxl (`03.UA_Cherry_ID_Harmonise_ECPGR.py`) |
+| Direct-match and parentage vs. ECPGR reference | R / Quarto (`02.UA_Cherry_ID_Paternity.qmd`) |
 | Bayesian clustering | STRUCTURE 2.3.4; structureHarvester (Evanno ΔK); CLUMPP 1.1.2 |
 | DAPC | R, adegenet (`01.UA_Cherry_ID_DAPC.qmd`) |
 | NJ dendrogram, factorial analysis | DARwin 6 |
