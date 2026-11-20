@@ -89,9 +89,9 @@ The ECPGR sweet cherry reference files in `R_UA_Cherry_ID/data/` are derived fro
 
 **Data and code** (Zenodo archive of this repository)
 
-> Ivanovych Y (2026) UA_Cherry_ID_Ivanovych_2026, version v1. Zenodo. https://doi.org/10.5281/zenodo.24395865
+> Ivanovych Y (2026) UA_Cherry_ID_Ivanovych_2026. Zenodo. https://doi.org/10.5281/zenodo.24395864
 
-To cite whichever version is current, use the concept DOI https://doi.org/10.5281/zenodo.24395864. The *Cite this repository* button on GitHub reads `CITATION.cff`.
+The *Cite this repository* link on GitHub reads `CITATION.cff`.
 
 ## Licence
 

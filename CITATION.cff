@@ -10,13 +10,6 @@ authors:
 version: v1
 date-released: 2026-11-20
 doi: 10.5281/zenodo.24395864
-identifiers:
-  - type: doi
-    value: 10.5281/zenodo.24395864
-    description: "Zenodo concept DOI (all versions)"
-  - type: doi
-    value: 10.5281/zenodo.24395865
-    description: "Zenodo DOI of version v1"
 repository-code: "https://github.com/Yaroscv/UA_Cherry_ID_Ivanovych_2026"
 license: CC-BY-4.0
 keywords:
