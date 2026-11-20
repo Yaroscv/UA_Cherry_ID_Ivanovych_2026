@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use these data or code, please cite the article below (preferred citation) and this archive."
+title: "UA_Cherry_ID_Ivanovych_2026: data and analysis code for the molecular identification and genetic structure of Ukrainian sweet cherry germplasm"
+type: dataset
+authors:
+  - family-names: Ivanovych
+    given-names: Yaroslav
+    orcid: "https://orcid.org/0000-0002-4066-4106"
+    affiliation: "Swedish University of Agricultural Sciences (SLU), Uppsala, Sweden"
+version: v1
+date-released: 2026-11-20
+doi: 10.5281/zenodo.24395864
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.24395864
+    description: "Zenodo concept DOI (all versions)"
+  - type: doi
+    value: 10.5281/zenodo.24395865
+    description: "Zenodo DOI of version v1"
+repository-code: "https://github.com/Yaroscv/UA_Cherry_ID_Ivanovych_2026"
+license: CC-BY-4.0
+keywords:
+  - Prunus avium
+  - sweet cherry
+  - microsatellite markers
+  - self-incompatibility
+  - cultivar identification
+  - germplasm management
+  - Ukraine
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Ivanovych
+      given-names: Yaroslav
+      orcid: "https://orcid.org/0000-0002-4066-4106"
+  title: "Germplasm characterization and genetic structure of Ukrainian sweet cherry (Prunus avium L.) assessed by microsatellite and S-locus markers"
+  journal: "Genetic Resources and Crop Evolution"
+  year: 2026
+  doi: 10.1007/s10722-026-02994-3

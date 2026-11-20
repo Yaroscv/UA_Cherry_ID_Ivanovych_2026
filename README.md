@@ -1,10 +1,12 @@
 # UA_Cherry_ID_Ivanovych_2026
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24395864.svg)](https://doi.org/10.5281/zenodo.24395864)
+
 Data and analysis code for:
 
 > **Ivanovych Y** (2026) Germplasm characterization and genetic structure of Ukrainian sweet cherry (*Prunus avium* L.) assessed by microsatellite and *S*-locus markers. *Genetic Resources and Crop Evolution*. https://doi.org/10.1007/s10722-026-02994-3
 
-If you use these data or scripts, please cite the article (see [Citation](#citation)).
+If you use these data or scripts, please cite the article and the Zenodo archive (see [Citation](#citation)).
 
 ## Abstract
 
@@ -31,6 +33,7 @@ UA_Cherry_ID_Ivanovych_2026/
 │   ├── 03.UA_Cherry_ID_Harmonise_ECPGR.py           # v1.0.1 — calibration of six SSR loci to the ECPGR scale (Supplementary Table S3)
 │   └── data/                                        # inputs for 01–03: UKR genotypes and metadata, harmonised UKR query (90 × 6 loci), ECPGR reference files
 ├── UA_Cherry_ID_Ivanovych_2026.ipynb                # Python: structureHarvester / Evanno ΔK, CLUMPP indfile, bar plots, BIC plot, pedigree figure
+├── CITATION.cff                                     # citation metadata (GitHub "Cite this repository"; Zenodo)
 ├── LICENSE
 └── README.md
 ```
@@ -80,7 +83,15 @@ The ECPGR sweet cherry reference files in `R_UA_Cherry_ID/data/` are derived fro
 
 ## Citation
 
+**Article**
+
 > Ivanovych Y (2026) Germplasm characterization and genetic structure of Ukrainian sweet cherry (*Prunus avium* L.) assessed by microsatellite and *S*-locus markers. Genet Resour Crop Evol. https://doi.org/10.1007/s10722-026-02994-3
+
+**Data and code** (Zenodo archive of this repository)
+
+> Ivanovych Y (2026) UA_Cherry_ID_Ivanovych_2026, version v1. Zenodo. https://doi.org/10.5281/zenodo.24395865
+
+To cite whichever version is current, use the concept DOI https://doi.org/10.5281/zenodo.24395864. The *Cite this repository* button on GitHub reads `CITATION.cff`.
 
 ## Licence
 
