@@ -2,10 +2,9 @@
 
 Data and analysis code for:
 
-> **Ivanovych Y.** Molecular identification and genetic structure of Ukrainian sweet cherry (*Prunus avium* L.) germplasm assessed by microsatellite and *S*-locus markers. *Manuscript in revision.*
+> **Ivanovych Y** (2026) Germplasm characterization and genetic structure of Ukrainian sweet cherry (*Prunus avium* L.) assessed by microsatellite and *S*-locus markers. *Genetic Resources and Crop Evolution*. https://doi.org/10.1007/s10722-026-02994-3
 
-> [!NOTE]
-> This repository accompanies a manuscript that is currently under peer review. Please do not cite or redistribute the data until the article is published; the citation below will be updated with the journal reference and DOI.
+If you use these data or scripts, please cite the article (see [Citation](#citation)).
 
 ## Abstract
 
@@ -81,7 +80,7 @@ The ECPGR sweet cherry reference files in `R_UA_Cherry_ID/data/` are derived fro
 
 ## Citation
 
-> Ivanovych Y. (2026) Molecular identification and genetic structure of Ukrainian sweet cherry (*Prunus avium* L.) germplasm assessed by microsatellite and *S*-locus markers. *Journal, volume, pages.* DOI: *to be added.*
+> Ivanovych Y (2026) Germplasm characterization and genetic structure of Ukrainian sweet cherry (*Prunus avium* L.) assessed by microsatellite and *S*-locus markers. Genet Resour Crop Evol. https://doi.org/10.1007/s10722-026-02994-3
 
 ## Licence
 
